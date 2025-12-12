@@ -1,6 +1,7 @@
 ﻿using Microsoft.Playwright;
 using System;
 using System.Linq;
+using System.Security.Policy;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -88,26 +89,28 @@ namespace UkrainianBotTaras.Src
 
         private async Task OpenURL(string url)
         {
-            Console.WriteLine("Opening homepage...");
+            Console.WriteLine($"Opening url: {url}...");
             await page.GotoAsync(url);
             await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         }
 
         private async Task WaitForElementToDisapear(string text, int maxWaitInMS)
         {
+            Console.WriteLine($"Checking if disapeared up to {maxWaitInMS}MS: {text}...");
             var element = page.GetByText(text);
             await element.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = maxWaitInMS });
         }
 
         private async Task WaitForElementToAppear(string text, int maxWaitInMS)
         {
+            Console.WriteLine($"Checking if appeared up to {maxWaitInMS}MS: {text}...");
             var element = page.GetByText(text);
             await element.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = maxWaitInMS });
         }
 
         private async Task DownloadPage(string directoryPath)
         {
-            Console.WriteLine("Downloading page HTML...");
+            Console.WriteLine($"Downloading page HTML to: {directoryPath}...");
 
             // 1. Get the current DOM state (HTML)
             string content = await page.ContentAsync();
@@ -166,7 +169,7 @@ namespace UkrainianBotTaras.Src
         }
         private async Task Click(string searchText)
         {
-            Console.WriteLine($"Clicking {searchText}...");
+            Console.WriteLine($"Clicking: {searchText}...");
             var frame = await GetActiveFrame();
             await frame.GetByText(searchText).HumanClickAsync();
         }
@@ -190,7 +193,7 @@ namespace UkrainianBotTaras.Src
 
         private async Task UploadFile(string searchText, string filePath)
         {
-            Console.WriteLine("Uploading key file...");
+            Console.WriteLine($"Uploading key file {filePath} to {searchText}...");
             var frame = await GetActiveFrame();
 
             var fileChooserTask = page.WaitForFileChooserAsync();
@@ -203,7 +206,7 @@ namespace UkrainianBotTaras.Src
 
         private async Task FillInput(string searchText, string input)
         {
-            Console.WriteLine("Filling Input");
+            Console.WriteLine($"Filling Input {searchText} with {input}");
             var frame = await GetActiveFrame();
 
             var Input = frame.Locator(searchText);
@@ -344,7 +347,7 @@ namespace UkrainianBotTaras.Src
 
         private async Task FillInputComplex(string text, string value)
         {
-            Console.WriteLine($"Filling Input: {text}");
+            Console.WriteLine($"Filling Input: {text} with {value}");
             IFrame frame = await GetActiveFrame();
 
             ILocator input;

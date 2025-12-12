@@ -1,6 +1,7 @@
 ﻿using Microsoft.Playwright;
 using System;
 using System.ComponentModel.Design.Serialization;
+using System.Text;
 using System.Threading.Tasks;
 using UkrainianBotTaras.Src;
 
@@ -12,6 +13,8 @@ class Program
     static Steps steps;
     static async Task Main()
     {
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
         var ctx = new StepsContext
         {
             BaseUrl = "https://id.e-consul.gov.ua/",
