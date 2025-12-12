@@ -50,6 +50,14 @@ namespace UkrainianBotTaras.Src
                 TimezoneId = "Europe/Kiev"
             });
 
+            // ---------------------------------------------------------
+            // INCREASE TIMEOUTS HERE
+            // ---------------------------------------------------------
+            // 60000ms = 60 seconds (Double the default)
+            context.SetDefaultTimeout(120000);           // For actions (Click, Fill, WaitForSelector)
+            context.SetDefaultNavigationTimeout(120000); // For Page.GotoAsync, WaitForLoadState
+            // ---------------------------------------------------------
+
             // 3. Inject the Stealth Script
             // This runs before the page loads to delete the 'webdriver' property
             await context.AddInitScriptAsync(@"
