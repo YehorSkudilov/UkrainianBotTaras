@@ -49,8 +49,20 @@ namespace UkrainianBotTaras.Src
                 }
 
                     await Click("Далі");
-                    await WaitForSearchAndSS("Відбувається пошук активних слотів", @"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
-                    await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
+                    await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
+                    await WaitForElementToDisapear("Відбувається пошук активних слотів", 120000);
+
+                    await page.WaitForTimeoutAsync(3000);
+
+                    if (!await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync()) {
+                        await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
+                        await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
+                    } 
+                    else
+                    {
+                        await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\SS");
+                        await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\DP");
+                    }
                     await page.ReloadAsync();
             }
         }
@@ -64,6 +76,18 @@ namespace UkrainianBotTaras.Src
             Console.WriteLine("Opening homepage...");
             await page.GotoAsync(url);
             await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        }
+
+        private async Task WaitForElementToDisapear(string text, int maxWaitInMS)
+        {
+            var element = page.GetByText(text);
+            await element.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = maxWaitInMS });
+        }
+
+        private async Task WaitForElementToAppear(string text, int maxWaitInMS)
+        {
+            var element = page.GetByText(text);
+            await element.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = maxWaitInMS });
         }
 
         private async Task DownloadPage(string directoryPath)
@@ -94,27 +118,8 @@ namespace UkrainianBotTaras.Src
             Console.WriteLine($"✅ Page source saved to: {finalPath}");
         }
 
-        private async Task WaitForSearchAndSS(string searchMessage, string directoryPath)
+        private async Task ScreenShot(string directoryPath)
         {
-            Console.WriteLine("Waiting for search logic...");
-
-            var searchMessageElement = page.GetByText(searchMessage);
-
-            try
-            {
-                // 1. Wait for "Searching..." to APPEAR
-                await searchMessageElement.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
-                Console.WriteLine("✅ Search started.");
-
-                // 2. Wait for "Searching..." to DISAPPEAR
-                await searchMessageElement.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 60000 });
-                Console.WriteLine("✅ Search finished.");
-            }
-            catch (TimeoutException)
-            {
-                Console.WriteLine("⚠️ Warning: Search text timed out. Proceeding to screenshot.");
-            }
-
             // --- FILE HANDLING ---
 
             // 1. Ensure the directory exists
