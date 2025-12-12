@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace UkrainianBotTaras
 {
-    public class BotContext
+    public class StepsContext
     {
         public string BaseUrl { get; set; }
         public string KeyFilePath { get; set; }
@@ -14,5 +14,8 @@ namespace UkrainianBotTaras
         public string DayOfBirth { get; set; }
         public string MonthOfBirth {get; set;}
         public string YearOfBirth { get; set; }
+        public string Country { get; set; }
+        public string ConsulateName { get; set; }
+
     }
 }

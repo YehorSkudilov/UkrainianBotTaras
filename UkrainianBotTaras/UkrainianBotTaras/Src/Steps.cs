@@ -7,10 +7,10 @@ namespace UkrainianBotTaras.Src
 {
     internal class Steps : ISteps
     {
-        private readonly BotContext ctx;
+        private readonly StepsContext ctx;
         private IPage page; // Class-level variable (no underscore)
 
-        public Steps(BotContext ctx)
+        public Steps(StepsContext ctx)
         {
             this.ctx = ctx;
         }
@@ -31,7 +31,8 @@ namespace UkrainianBotTaras.Src
             await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
             await FillInputComplex("рік", ctx.YearOfBirth);
             await Click("Далі");
-            SelectAndEnterToDropdown("Країна", ctx)
+            await FillSmartDropdown("Країна", ctx.Country);
+            await FillSmartDropdown("Консульська установа", ctx.Country);  
         }
 
         // ----------------------------
@@ -74,6 +75,72 @@ namespace UkrainianBotTaras.Src
             await Input.HumanFillAsync(input);
         }
 
+        private async Task FillSmartDropdown(string identifier, string value)
+        {
+            Console.WriteLine($"Smart Selecting: '{identifier}' -> '{value}'");
+            var frame = await GetActiveFrame();
+            ILocator element;
+
+
+            if (identifier.StartsWith("#"))
+            {
+                element = frame.Locator(identifier);
+            }
+            else
+            {
+                var byQa = frame.Locator($"[data-qa='{identifier}']");
+                if (await byQa.CountAsync() > 0)
+                {
+                    element = byQa.First;
+                }
+                else
+                {
+                    var byId = frame.Locator($"#{identifier}");
+                    if (await byId.CountAsync() > 0)
+                    {
+                        element = byId.First;
+                    }
+                    else
+                    {
+                
+                        var label = frame.GetByText(identifier, new() { Exact = true });
+                        element = frame.Locator($"div[role='button']:near(:text('{identifier}'))").First;
+
+                        if (await element.CountAsync() == 0)
+                        {
+                            element = frame.GetByLabel(identifier).First;
+                        }
+                    }
+                }
+            }
+
+            var tagName = await element.EvaluateAsync<string>("el => el.tagName.toLowerCase()");
+
+            if (tagName == "input")
+            {
+                await element.HumanFillAsync(value, page);
+            }
+            else
+            {
+                await element.HumanClickAsync(page);
+            }
+
+
+            var optionList = page.Locator("li[role='option']");
+
+            try
+            {
+                await optionList.First.WaitForAsync(new() { Timeout = 5000 });
+            }
+            catch
+            {
+                Console.WriteLine("⚠️ Options didn't appear. Retrying click...");
+                await element.ClickAsync(); // Retry hard click
+            }
+
+            await optionList.GetByText(value, new() { Exact = true }).HumanClickAsync(page);
+        }
+
         private async Task SelectAndEnterToDropdown(string labelOrQaId, string optionText)
         {
             Console.WriteLine($"Selecting '{optionText}' in dropdown '{labelOrQaId}'...");
@@ -85,6 +152,7 @@ namespace UkrainianBotTaras.Src
 
             await dropdownTrigger.HumanClickAsync(page);
 
+            await page.WaitForSelectorAsync("li[role='option']");
             var option = frame.Locator("li[role='option']").GetByText(optionText);
 
             if (!await option.IsVisibleAsync())
