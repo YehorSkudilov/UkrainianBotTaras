@@ -27,9 +27,11 @@ namespace UkrainianBotTaras.Src
             await Click("Продовжити");
             await Click("Запис на візит");
             await Click("Записатись на візит");
-            await FillInput("день", "08");
-            await FillInput("день", "05");
-            await FillInput("день", "08");
+            await FillInputComplex("день", ctx.DayOfBirth);
+            await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
+            await FillInputComplex("рік", ctx.YearOfBirth);
+            await Click("Далі");
+            SelectAndEnterToDropdown("Країна", ctx)
         }
 
         // ----------------------------
@@ -65,11 +67,58 @@ namespace UkrainianBotTaras.Src
 
         private async Task FillInput(string searchText, string input)
         {
-            Console.WriteLine("Filling password...");
+            Console.WriteLine("Filling Input");
             var frame = await GetActiveFrame();
 
-            var passwordInput = frame.Locator(searchText);
-            await passwordInput.HumanFillAsync(input);
+            var Input = frame.Locator(searchText);
+            await Input.HumanFillAsync(input);
+        }
+
+        private async Task SelectAndEnterToDropdown(string labelOrQaId, string optionText)
+        {
+            Console.WriteLine($"Selecting '{optionText}' in dropdown '{labelOrQaId}'...");
+            var frame = await GetActiveFrame();
+
+            ILocator dropdownTrigger;
+
+            dropdownTrigger = frame.Locator($"div[role='button']:near(:text('{labelOrQaId}'))").First;
+
+            await dropdownTrigger.HumanClickAsync(page);
+
+            var option = frame.Locator("li[role='option']").GetByText(optionText);
+
+            if (!await option.IsVisibleAsync())
+            {
+                
+                option = page.Locator("li[role='option']").GetByText(optionText);
+            }
+
+            await option.HumanClickAsync(page);
+        }
+
+        private async Task FillInputComplex(string text, string value)
+        {
+            Console.WriteLine($"Filling Input: {text}");
+            IFrame frame = await GetActiveFrame();
+
+            ILocator input;
+
+            // 1. Try to find by the 'data-qa' attribute (Your HTML uses this!)
+            // This turns "день" into "[data-qa='день']"
+            var byDataQa = frame.Locator($"[data-qa='{text}']");
+
+            if (await byDataQa.CountAsync() > 0)
+            {
+                input = byDataQa.First;
+            }
+            else
+            {
+                // 2. Fallback: Try to find by visual Label
+                input = frame.GetByLabel(text).First;
+            }
+
+            // Now 'input' is valid, so BoundingBoxAsync won't timeout
+            await input.HumanFillAsync(value, page);
         }
 
         private async Task<IFrame> GetActiveFrame()

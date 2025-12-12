@@ -16,7 +16,10 @@ class Program
         {
             BaseUrl = "https://id.e-consul.gov.ua/",
             KeyFilePath = @"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Завірюха_А_Р_monoКЕП_2025-12-11T213412.pfx",
-            KeyPassword = "$hzhehs&Q6"
+            KeyPassword = "$hzhehs&Q6",
+            DayOfBirth = "08",
+            MonthOfBirth = "травня",
+            YearOfBirth = "2006"
         };
 
         bot = await Bot.CreateAsync();
