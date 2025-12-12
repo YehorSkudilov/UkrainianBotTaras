@@ -25,28 +25,35 @@ namespace UkrainianBotTaras.Src
 
             while (true)
             {
-                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                try
+                {
+                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-                if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync()) {
-                    await Click("Особистий ключ");
-                    await UploadFile("Оберіть ключ на своєму носієві", ctx.KeyFilePath);
-                    await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
-                    await Click("Продовжити");
-                    await Click("Запис на візит");
-                    await Click("Записатись на візит");
-                    await FillInputComplex("день", ctx.DayOfBirth);
-                    await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
-                    await FillInputComplex("рік", ctx.YearOfBirth);
-                    await Click("Далі");
-                    await page.WaitForTimeoutAsync(3000);
-                    await FillSmartDropdown("Країна", ctx.Country);
-                    await page.WaitForTimeoutAsync(3000);
-                    await FillSmartDropdown("Консульська установа", ctx.ConsulateName);
-                    await Click("Далі");
-                    await page.WaitForTimeoutAsync(3000);
-                    await FillSmartDropdown("#service", ctx.ServiceName);
-                    await ClickCheckboxOnLeft("Для себе");
-                }
+                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Вітаемо").IsVisibleAsync() && await page.GetByText("Запис на візит").IsVisibleAsync())
+                    {
+                        if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync())
+                        {
+                            await Click("Особистий ключ");
+                            await UploadFile("Оберіть ключ на своєму носієві", ctx.KeyFilePath);
+                            await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
+                            await Click("Продовжити");
+                        }
+                        
+                        await Click("Запис на візит");
+                        await Click("Записатись на візит");
+                        await FillInputComplex("день", ctx.DayOfBirth);
+                        await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
+                        await FillInputComplex("рік", ctx.YearOfBirth);
+                        await Click("Далі");
+                        await page.WaitForTimeoutAsync(3000);
+                        await FillSmartDropdown("Країна", ctx.Country);
+                        await page.WaitForTimeoutAsync(3000);
+                        await FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+                        await Click("Далі");
+                        await page.WaitForTimeoutAsync(3000);
+                        await FillSmartDropdown("#service", ctx.ServiceName);
+                        await ClickCheckboxOnLeft("Для себе");
+                    }
 
                     await Click("Далі");
                     await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
@@ -54,16 +61,24 @@ namespace UkrainianBotTaras.Src
 
                     await page.WaitForTimeoutAsync(3000);
 
-                    if (!await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync()) {
+                    if (!await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync())
+                    {
                         await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
                         await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
-                    } 
+                    }
                     else
                     {
                         await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\SS");
                         await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\DP");
                     }
                     await page.ReloadAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"\n❌ Error: {ex.Message}");
+                    Console.WriteLine($"Stack Trace: {ex.StackTrace}");
+                    await OpenURL(ctx.BaseUrl);
+                }
             }
         }
 
