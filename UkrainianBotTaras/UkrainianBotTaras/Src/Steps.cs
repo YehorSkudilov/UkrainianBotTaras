@@ -2,6 +2,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace UkrainianBotTaras.Src
 {
@@ -21,24 +22,37 @@ namespace UkrainianBotTaras.Src
             this.page = page; // Assign to the class field
 
             await OpenURL(ctx.BaseUrl);
-            await Click("Особистий ключ");
-            await UploadFile("Оберіть ключ на своєму носієві", ctx.KeyFilePath);
-            await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
-            await Click("Продовжити");
-            await Click("Запис на візит");
-            await Click("Записатись на візит");
-            await FillInputComplex("день", ctx.DayOfBirth);
-            await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
-            await FillInputComplex("рік", ctx.YearOfBirth);
-            await Click("Далі");
-            await page.WaitForTimeoutAsync(3000);
-            await FillSmartDropdown("Країна", ctx.Country);
-            await page.WaitForTimeoutAsync(3000);
-            await FillSmartDropdown("Консульська установа", ctx.ConsulateName);
-            await Click("Далі");
-            await FillSmartDropdown("Выберить послугу", ctx.ServiceName);
-            await Click("Далі");
 
+            while (true)
+            {
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+                if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync()) {
+                    await Click("Особистий ключ");
+                    await UploadFile("Оберіть ключ на своєму носієві", ctx.KeyFilePath);
+                    await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
+                    await Click("Продовжити");
+                    await Click("Запис на візит");
+                    await Click("Записатись на візит");
+                    await FillInputComplex("день", ctx.DayOfBirth);
+                    await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
+                    await FillInputComplex("рік", ctx.YearOfBirth);
+                    await Click("Далі");
+                    await page.WaitForTimeoutAsync(3000);
+                    await FillSmartDropdown("Країна", ctx.Country);
+                    await page.WaitForTimeoutAsync(3000);
+                    await FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+                    await Click("Далі");
+                    await page.WaitForTimeoutAsync(3000);
+                    await FillSmartDropdown("#service", ctx.ServiceName);
+                    await ClickCheckboxOnLeft("Для себе");
+                }
+
+                    await Click("Далі");
+                    await WaitForSearchAndSS("Відбувається пошук активних слотів", @"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
+                    await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
+                    await page.ReloadAsync();
+            }
         }
 
         // ----------------------------
@@ -52,11 +66,106 @@ namespace UkrainianBotTaras.Src
             await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         }
 
+        private async Task DownloadPage(string directoryPath)
+        {
+            Console.WriteLine("Downloading page HTML...");
+
+            // 1. Get the current DOM state (HTML)
+            string content = await page.ContentAsync();
+
+            // 2. Ensure directory exists
+            System.IO.Directory.CreateDirectory(directoryPath);
+
+            // 3. Generate Unique Filename
+            string baseName = "page_source";
+            string extension = ".html";
+            string finalPath = System.IO.Path.Combine(directoryPath, $"{baseName}{extension}");
+            int counter = 1;
+
+            while (System.IO.File.Exists(finalPath))
+            {
+                finalPath = System.IO.Path.Combine(directoryPath, $"{baseName}_{counter}{extension}");
+                counter++;
+            }
+
+            // 4. Write to file
+            await System.IO.File.WriteAllTextAsync(finalPath, content);
+
+            Console.WriteLine($"✅ Page source saved to: {finalPath}");
+        }
+
+        private async Task WaitForSearchAndSS(string searchMessage, string directoryPath)
+        {
+            Console.WriteLine("Waiting for search logic...");
+
+            var searchMessageElement = page.GetByText(searchMessage);
+
+            try
+            {
+                // 1. Wait for "Searching..." to APPEAR
+                await searchMessageElement.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
+                Console.WriteLine("✅ Search started.");
+
+                // 2. Wait for "Searching..." to DISAPPEAR
+                await searchMessageElement.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 60000 });
+                Console.WriteLine("✅ Search finished.");
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine("⚠️ Warning: Search text timed out. Proceeding to screenshot.");
+            }
+
+            // --- FILE HANDLING ---
+
+            // 1. Ensure the directory exists
+            System.IO.Directory.CreateDirectory(directoryPath);
+
+            // 2. Define base filename
+            string baseName = "slots_result";
+            string extension = ".png";
+            string finalPath = System.IO.Path.Combine(directoryPath, $"{baseName}{extension}");
+            int counter = 1;
+
+            // 3. Loop until we find a unique name inside that directory
+            while (System.IO.File.Exists(finalPath))
+            {
+                finalPath = System.IO.Path.Combine(directoryPath, $"{baseName}_{counter}{extension}");
+                counter++;
+            }
+
+            // 4. Take Screenshot
+            Console.WriteLine($"Taking Screenshot to: {finalPath}");
+
+            await page.ScreenshotAsync(new PageScreenshotOptions
+            {
+                Path = finalPath,
+                FullPage = true
+            });
+
+            Console.WriteLine("✅ Screenshot saved.");
+        }
         private async Task Click(string searchText)
         {
             Console.WriteLine($"Clicking {searchText}...");
             var frame = await GetActiveFrame();
             await frame.GetByText(searchText).HumanClickAsync();
+        }
+
+        private async Task ClickCheckboxOnLeft(string labelText)
+        {
+            Console.WriteLine($"Clicking checkbox for: '{labelText}'...");
+            var frame = await GetActiveFrame();
+
+            // Strategy: Find the <label> container that has the text, then find the checkbox inside it.
+            // This is safer than :left-of because they are grouped together in the HTML.
+            var labelContainer = frame.Locator("label").Filter(new() { HasText = labelText }).First;
+
+            // Find the visual checkbox span inside that label
+            var checkbox = labelContainer.Locator(".MuiCheckbox-root");
+
+            // Scroll it into view and click
+            await checkbox.ScrollIntoViewIfNeededAsync();
+            await checkbox.HumanClickAsync(page);
         }
 
         private async Task UploadFile(string searchText, string filePath)
