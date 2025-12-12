@@ -8,7 +8,7 @@ namespace UkrainianBotTaras.Src
     {
         private IPlaywright? playwright;
         private IBrowser? browser;
-        private IBrowserContext? context; // Added Context
+        private IBrowserContext? context; 
         private IPage? page;
 
         public static async Task<Bot> CreateAsync()

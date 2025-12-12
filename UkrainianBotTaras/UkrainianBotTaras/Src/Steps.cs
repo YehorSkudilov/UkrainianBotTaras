@@ -8,96 +8,77 @@ namespace UkrainianBotTaras.Src
     internal class Steps : ISteps
     {
         private readonly BotContext ctx;
+        private IPage page; // Class-level variable (no underscore)
 
         public Steps(BotContext ctx)
         {
             this.ctx = ctx;
         }
 
+        // ENTRY POINT
         public async Task RunAsync(IPage page)
         {
-            await OpenHomepage(page);
-            await ClickPersonalKey(page);
-            await UploadKeyFile(page);
-            await FillKeyPassword(page);
-            await ClickConfirm(page);
-            // await KeepAlive();
+            this.page = page; // Assign to the class field
+
+            await OpenURL(ctx.BaseUrl);
+            await Click("Особистий ключ");
+            await UploadFile("Оберіть ключ на своєму носієві", ctx.KeyFilePath);
+            await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
+            await Click("Продовжити");
+            await Click("Запис на візит");
+            await Click("Записатись на візит");
+            await FillInput("день", "08");
+            await FillInput("день", "05");
+            await FillInput("день", "08");
         }
 
         // ----------------------------
-        // STEPS
+        // Reusable Rules
         // ----------------------------
 
-        private async Task OpenHomepage(IPage page)
+        private async Task OpenURL(string url)
         {
             Console.WriteLine("Opening homepage...");
-            await page.GotoAsync(ctx.BaseUrl);
-            // Wait for visual stability
+            await page.GotoAsync(url);
             await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         }
 
-        private async Task ClickPersonalKey(IPage page)
+        private async Task Click(string searchText)
         {
-            Console.WriteLine("Clicking Особистий ключ...");
-
-            var frame = GetAuthFrame(page);
-
-            // USE HUMAN CLICK
-            await frame.GetByText("Особистий ключ").HumanClickAsync();
+            Console.WriteLine($"Clicking {searchText}...");
+            var frame = await GetActiveFrame();
+            await frame.GetByText(searchText).HumanClickAsync();
         }
 
-        private async Task UploadKeyFile(IPage page)
+        private async Task UploadFile(string searchText, string filePath)
         {
             Console.WriteLine("Uploading key file...");
-            var frame = GetAuthFrame(page);
+            var frame = await GetActiveFrame();
 
-            // 1. Prepare to catch the file dialog
             var fileChooserTask = page.WaitForFileChooserAsync();
 
-            // 2. Click specifically the blue text seen in your screenshot
-            // We use partial text matching in case of minor spacing differences
-            await frame.GetByText("Оберіть ключ на своєму носієві").HumanClickAsync();
+            await frame.GetByText(searchText).HumanClickAsync();
 
-            // 3. Upload the file
             var fileChooser = await fileChooserTask;
-            await fileChooser.SetFilesAsync(ctx.KeyFilePath);
+            await fileChooser.SetFilesAsync(filePath);
         }
 
-        private async Task FillKeyPassword(IPage page)
+        private async Task FillInput(string searchText, string input)
         {
             Console.WriteLine("Filling password...");
-            var frame = GetAuthFrame(page);
+            var frame = await GetActiveFrame();
 
-            // Convert Frame.FillAsync to Locator.HumanFillAsync
-            var passwordInput = frame.Locator("#id-app-login-sign-form-file-key-password");
-
-            // USE HUMAN FILL
-            await passwordInput.HumanFillAsync(ctx.KeyPassword);
+            var passwordInput = frame.Locator(searchText);
+            await passwordInput.HumanFillAsync(input);
         }
 
-        private async Task ClickConfirm(IPage page)
+        private async Task<IFrame> GetActiveFrame()
         {
-            Console.WriteLine("Clicking Продовжити...");
-            var frame = GetAuthFrame(page);
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-            var confirmBtn = frame.Locator("#id-app-login-sign-form-file-key-sign-button");
-
-            // USE HUMAN CLICK
-            await confirmBtn.HumanClickAsync();
-        }
-
-        // Helper to keep code clean since you check for the frame often
-        private IFrame GetAuthFrame(IPage page)
-        {
-            var frame = page.Frames.FirstOrDefault(f => f.Url.Contains("id.e-consul.gov.ua"));
+            var frame = page.MainFrame;
             if (frame == null) throw new Exception("Auth iframe not found");
             return frame;
-        }
-
-        private Task KeepAlive()
-        {
-            Console.WriteLine("Keeping browser alive...");
-            return Task.Delay(-1);
         }
     }
 }
