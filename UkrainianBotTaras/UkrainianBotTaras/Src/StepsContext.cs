@@ -16,6 +16,8 @@ namespace UkrainianBotTaras
         public string YearOfBirth { get; set; }
         public string Country { get; set; }
         public string ConsulateName { get; set; }
+        public string ServiceName { get; set; }
+
 
     }
 }

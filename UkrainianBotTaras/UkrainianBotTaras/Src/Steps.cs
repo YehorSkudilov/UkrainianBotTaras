@@ -31,8 +31,14 @@ namespace UkrainianBotTaras.Src
             await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
             await FillInputComplex("рік", ctx.YearOfBirth);
             await Click("Далі");
+            await page.WaitForTimeoutAsync(3000);
             await FillSmartDropdown("Країна", ctx.Country);
-            await FillSmartDropdown("Консульська установа", ctx.Country);  
+            await page.WaitForTimeoutAsync(3000);
+            await FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+            await Click("Далі");
+            await FillSmartDropdown("Выберить послугу", ctx.ServiceName);
+            await Click("Далі");
+
         }
 
         // ----------------------------
@@ -79,68 +85,111 @@ namespace UkrainianBotTaras.Src
         {
             Console.WriteLine($"Smart Selecting: '{identifier}' -> '{value}'");
             var frame = await GetActiveFrame();
-            ILocator element;
+            ILocator element = null;
 
-
-            if (identifier.StartsWith("#"))
-            {
-                element = frame.Locator(identifier);
-            }
-            else
+            // ---------------------------------------------------------
+            // 1. FIND THE ELEMENT (Dynamic Search Strategy)
+            // ---------------------------------------------------------
+            try
             {
                 var byQa = frame.Locator($"[data-qa='{identifier}']");
-                if (await byQa.CountAsync() > 0)
+                var byId = frame.Locator($"#{identifier}");
+
+                // Wait for either to be attached to DOM
+                if (await byQa.CountAsync() > 0 || await byId.CountAsync() > 0)
                 {
-                    element = byQa.First;
+                    element = (await byQa.CountAsync() > 0) ? byQa.First : byId.First;
                 }
                 else
                 {
-                    var byId = frame.Locator($"#{identifier}");
-                    if (await byId.CountAsync() > 0)
-                    {
-                        element = byId.First;
-                    }
-                    else
-                    {
-                
-                        var label = frame.GetByText(identifier, new() { Exact = true });
-                        element = frame.Locator($"div[role='button']:near(:text('{identifier}'))").First;
+                    // Fallback: Check visual label or nearby button
+                    try { await frame.GetByText(identifier).First.WaitForAsync(new() { Timeout = 3000 }); } catch { }
 
-                        if (await element.CountAsync() == 0)
-                        {
-                            element = frame.GetByLabel(identifier).First;
-                        }
-                    }
+                    var trigger = frame.Locator($"div[role='button']:near(:text('{identifier}'))").First;
+                    if (await trigger.CountAsync() > 0) element = trigger;
+                    else element = frame.GetByLabel(identifier).First;
                 }
             }
+            catch
+            {
+                Console.WriteLine($"Could not find '{identifier}' normally. Trying generic fallback...");
+                element = frame.Locator(identifier).First;
+            }
 
+            if (element == null) throw new Exception($"Dropdown '{identifier}' not found.");
+
+            // ---------------------------------------------------------
+            // 2. INTERACT BASED ON TYPE
+            // ---------------------------------------------------------
             var tagName = await element.EvaluateAsync<string>("el => el.tagName.toLowerCase()");
 
             if (tagName == "input")
             {
-                await element.HumanFillAsync(value, page);
+                // CASE A: Autocomplete Input (Country/Consulate) - TYPE TO FILTER
+                Console.WriteLine("Detected Autocomplete Input. Typing to filter...");
+
+                // 1. Click and Clear
+                await element.ClickAsync();
+                await element.ClearAsync();
+
+                // 2. Type the value (This filters the virtual list so the option appears)
+                // We type slowly to trigger the JS search events
+                await element.TypeAsync(value, new LocatorTypeOptions { Delay = 100 });
+
+                // 3. Wait for the listbox to appear on the MAIN PAGE (outside iframe)
+                var listbox = page.Locator("ul[role='listbox']");
+                try
+                {
+                    await listbox.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
+                }
+                catch
+                {
+                    Console.WriteLine("⚠️ Listbox didn't open. Clicking chevron as fallback...");
+                    // Fallback: Click the arrow button if typing didn't open it
+                    var parent = element.Locator("xpath=..");
+                    var chevron = parent.Locator(".MuiAutocomplete-popupIndicator");
+                    if (await chevron.IsVisibleAsync()) await chevron.ClickAsync();
+                }
             }
             else
             {
+                // CASE B: Standard Select Div (Month) - CLICK TO OPEN
+                Console.WriteLine("Detected Standard Dropdown. Clicking...");
                 await element.HumanClickAsync(page);
             }
 
-
+            // ---------------------------------------------------------
+            // 3. SELECT THE OPTION
+            // ---------------------------------------------------------
+            // Material UI options are usually attached to the main 'page' body (Portals)
+            // We assume the list is now open and filtered (if it was an input)
             var optionList = page.Locator("li[role='option']");
 
             try
             {
-                await optionList.First.WaitForAsync(new() { Timeout = 5000 });
+                // Wait for at least one option to appear
+                await optionList.First.WaitForAsync(new() { Timeout = 10000 });
             }
             catch
             {
-                Console.WriteLine("⚠️ Options didn't appear. Retrying click...");
-                await element.ClickAsync(); // Retry hard click
+                Console.WriteLine("❌ Options list never appeared.");
+                throw new Exception($"Options list for '{identifier}' failed to load.");
             }
 
-            await optionList.GetByText(value, new() { Exact = true }).HumanClickAsync(page);
-        }
+            // 4. Find the specific text
+            // Exact match is preferred to avoid selecting "Great Britain" when searching "Great"
+            var specificOption = optionList.GetByText(value, new() { Exact = true });
 
+            if (!await specificOption.IsVisibleAsync())
+            {
+                Console.WriteLine($"Exact match for '{value}' not visible. Trying partial match...");
+                specificOption = optionList.GetByText(value, new() { Exact = false });
+            }
+
+            // Wait for the specific option to be stable and click
+            await specificOption.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
+            await specificOption.HumanClickAsync(page);
+        }
         private async Task SelectAndEnterToDropdown(string labelOrQaId, string optionText)
         {
             Console.WriteLine($"Selecting '{optionText}' in dropdown '{labelOrQaId}'...");
