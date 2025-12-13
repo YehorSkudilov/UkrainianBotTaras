@@ -1,5 +1,4 @@
 ﻿# STAGE 1: Build
-# Use the latest stable .NET SDK 9.0 (assuming you are targeting a preview or nightly build)
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
@@ -14,13 +13,11 @@ COPY . .
 RUN dotnet publish "UkrainianBotTaras.csproj" -c Release -o /app/publish
 
 # STAGE 2: Runtime (Playwright + .NET 9)
-# 1. IMPORTANT: Use the base image version that MATCHES your Microsoft.Playwright NuGet package (1.57.0)
-# 2. This image already has the browsers pre-installed, preventing the installation crash.
+# Use Playwright 1.57.0 base image (browsers are already installed here!)
 FROM mcr.microsoft.com/playwright/dotnet:v1.57.0-noble AS final
 WORKDIR /app
 
 # --- Install .NET 9 Runtime Manually ---
-# This step ensures the .NET 9 runtime is present, even if the base image defaults to a lower version.
 USER root
 RUN apt-get update && apt-get install -y wget && \
     wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh && \
@@ -36,9 +33,8 @@ ENV PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools
 COPY --from=build /app/publish .
 
 # ----------------------------------------------------
-# ❌ CRASH FIX: The line below must be DELETED entirely.
-# The base image (v1.57.0) already contains the correct browsers.
-# RUN pwsh playwright.ps1 install chromium
+# ⚠️ THIS LINE MUST BE DELETED OR COMMENTED OUT!
+# # RUN pwsh playwright.ps1 install chromium 
 # ----------------------------------------------------
 
 # Start the bot
