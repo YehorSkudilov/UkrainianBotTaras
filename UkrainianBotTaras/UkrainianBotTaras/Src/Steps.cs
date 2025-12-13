@@ -21,15 +21,22 @@ namespace UkrainianBotTaras.Src
         // ENTRY POINT
         public async Task RunAsync(IPage page)
         {
+           
+            this.page = page; // Assign to the class field
             try
             {
-                this.page = page; // Assign to the class field
-
                 await OpenURL(ctx.BaseUrl);
-
-                while (failedInARow < 5)
+            }
+            catch (Exception ex)
+            {
+                failedInARow++;
+                Console.WriteLine($"\n❌ Error: {ex.Message}");
+                Console.WriteLine($"wStack Trace: {ex.StackTrace}");
+            }
+            while (failedInARow < 5)
+            {
+                try
                 {
-
                     await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
                     if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync())
@@ -78,15 +85,14 @@ namespace UkrainianBotTaras.Src
                     await page.ReloadAsync();
                     failedInARow = 0;
                 }
-            }
-            catch (Exception ex)
-            {
-                failedInARow++;
-                Console.WriteLine($"\n❌ Error: {ex.Message}");
-                Console.WriteLine($"wStack Trace: {ex.StackTrace}");
-                await OpenURL(ctx.BaseUrl);
-            }
-            
+                catch (Exception ex)
+                {
+                    failedInARow++;
+                    Console.WriteLine($"\n❌ Error: {ex.Message}");
+                    Console.WriteLine($"wStack Trace: {ex.StackTrace}");
+                    await OpenURL(ctx.BaseUrl);
+                }
+            }     
         }
 
         // ----------------------------
