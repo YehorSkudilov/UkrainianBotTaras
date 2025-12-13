@@ -1,5 +1,6 @@
 ﻿using Microsoft.Playwright;
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Security.Policy;
 using System.Threading.Tasks;
@@ -40,7 +41,7 @@ namespace UkrainianBotTaras.Src
                             await Click("Продовжити");
                         }
                         
-                        await Click("Запис на візит");
+                        await ClickExact("Запис на візит");
                         await Click("Записатись на візит");
                         await FillInputComplex("день", ctx.DayOfBirth);
                         await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
@@ -62,7 +63,7 @@ namespace UkrainianBotTaras.Src
 
                     await page.WaitForTimeoutAsync(3000);
 
-                    if (!await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync())
+                    if (await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync())
                     {
                         await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
                         await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
@@ -71,13 +72,21 @@ namespace UkrainianBotTaras.Src
                     {
                         await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\SS");
                         await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\DP");
+                        await Click("День");
+                        //await SaveDateToFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data", await FindAndClickBestSlot(await GetDateFromFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data")));
+                        await ChooseBestSlot();
+                        do
+                        {
+                            await page.WaitForTimeoutAsync(5000);
+                            await Click("Підтвердити");
+                        } while(!await page.GetByText("Дякуємо, ми обробляємо ваш запит").IsVisibleAsync());
                     }
                     await page.ReloadAsync();
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"\n❌ Error: {ex.Message}");
-                    Console.WriteLine($"Stack Trace: {ex.StackTrace}");
+                    Console.WriteLine($"wStack Trace: {ex.StackTrace}");
                     await OpenURL(ctx.BaseUrl);
                 }
             }
@@ -92,6 +101,165 @@ namespace UkrainianBotTaras.Src
             Console.WriteLine($"Opening url: {url}...");
             await page.GotoAsync(url);
             await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        }
+
+        private async Task<ILocator?> FindFirstAvailableSlot()
+        {
+            Console.WriteLine("🕵️ Scanning for available slots...");
+            var frame = await GetActiveFrame();
+
+            // Selector: Divs with role='button' that DO NOT have "заброньовано" in the label
+            string selector = "div[role='button']:not([aria-label*='заброньовано'])";
+
+            var slots = frame.Locator(selector);
+
+            // Check if any matching elements exist
+            if (await slots.CountAsync() > 0)
+            {
+                var firstSlot = slots.First;
+                // Optional: Log what we found
+                var slotTime = await firstSlot.InnerTextAsync();
+                Console.WriteLine($"✅ Slot found: {slotTime}");
+
+                return firstSlot;
+            }
+
+            Console.WriteLine("⚠️ No available slots found.");
+            return null;
+        }
+
+        private async Task ChooseBestSlot()
+        {
+            ILocator ?bestSlot = null;
+            int index = 0;
+            do
+            {
+                await ClickDateByIndex(index);
+                bestSlot = await FindFirstAvailableSlot();
+                index++;
+            } while (bestSlot == null);
+
+            await Click(bestSlot);
+        }
+
+        private async Task ClickDateByIndex(int index)
+        {
+            Console.WriteLine($"👉 Attempting to click date at index [{index}]...");
+            var frame = await GetActiveFrame();
+
+            // Regex to strictly match 'DD.MM.YYYY' (e.g. 15.12.2025)
+            var datePattern = new System.Text.RegularExpressions.Regex(@"^\d{2}\.\d{2}\.\d{4}$");
+
+            // Locate ALL elements matching the date pattern
+            var dateElements = frame.GetByText(datePattern);
+
+            // Get the total count of dates currently visible/loaded
+            int count = await dateElements.CountAsync();
+
+            // CHECK: Throw exception if index is invalid
+            if (index < 0 || index >= count)
+            {
+                throw new IndexOutOfRangeException($"❌ Date index '{index}' is out of bounds. The calendar only has {count} dates available.");
+            }
+
+            // Select the specific date using .Nth()
+            var targetDate = dateElements.Nth(index);
+            var dateText = await targetDate.InnerTextAsync();
+
+            // Scroll horizontal bar if needed and click
+            await targetDate.ScrollIntoViewIfNeededAsync();
+            await targetDate.HumanClickAsync(page);
+
+            Console.WriteLine($"✅ Clicked date: {dateText}");
+
+            // Brief wait for slots to update
+            await page.WaitForTimeoutAsync(1000);
+        }
+
+        private async Task Click(ILocator locator)
+        {
+            // 1. Safety: Use .First to avoid "Strict Mode" errors if the locator matches multiple items
+            var target = locator.First;
+
+            // 2. Logging: Try to get the text for better logs, but default to "Element" if empty
+            string logText = "Element";
+            try
+            {
+                // Quick check for text content (timeout safety included in Playwright usually, but good to be aware)
+                if (await target.IsVisibleAsync())
+                {
+                    var text = await target.InnerTextAsync();
+                    if (!string.IsNullOrWhiteSpace(text)) logText = text.Trim();
+                }
+            }
+            catch { /* Ignore logging errors */ }
+
+            Console.WriteLine($"Clicking locator: '{logText}'...");
+
+            // 3. Execute Click
+            await target.HumanClickAsync(page);
+        }
+
+        private async Task SaveDateToFile(string directoryPath, DateTime date)
+        {
+            try
+            {
+                // 1. Combine directory with the fixed filename
+                string finalPath = System.IO.Path.Combine(directoryPath, "lastBooked.txt");
+
+                // 2. Ensure the directory exists
+                if (!System.IO.Directory.Exists(directoryPath))
+                {
+                    System.IO.Directory.CreateDirectory(directoryPath);
+                }
+
+                // 3. Save as ISO 8601 string
+                string dateString = date.ToString("O");
+                await System.IO.File.WriteAllTextAsync(finalPath, dateString);
+
+                Console.WriteLine($"💾 Saved new best slot to: {finalPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Failed to save date to file: {ex.Message}");
+            }
+        }
+
+        private async Task<DateTime> GetDateFromFile(string directoryPath)
+        {
+            try
+            {
+                // 1. Construct the full path
+                string finalPath = System.IO.Path.Combine(directoryPath, "lastBooked.txt");
+
+                // 2. Check if file exists
+                if (!System.IO.File.Exists(finalPath))
+                {
+                    Console.WriteLine($"📂 No 'lastBooked.txt' found in {directoryPath}. Starting fresh.");
+                    return DateTime.MinValue;
+                }
+
+                // 3. Read and Parse
+                string fileContent = await System.IO.File.ReadAllTextAsync(finalPath);
+
+                if (string.IsNullOrWhiteSpace(fileContent)) return DateTime.MinValue;
+
+                if (DateTime.TryParse(fileContent, null, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime savedDate))
+                {
+                    Console.WriteLine($"📂 Loaded previous booking: {savedDate}");
+                    return savedDate;
+                }
+                else
+                {
+                    Console.WriteLine("⚠️ File content corrupt. Starting fresh.");
+                    return DateTime.MinValue;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Error reading save file: {ex.Message}");
+                return DateTime.MinValue;
+            }
         }
 
         private async Task WaitForElementToDisapear(string text, int maxWaitInMS)
@@ -171,8 +339,42 @@ namespace UkrainianBotTaras.Src
         {
             Console.WriteLine($"Clicking: {searchText}...");
             var frame = await GetActiveFrame();
-            await frame.GetByText(searchText).HumanClickAsync();
+
+            // 1. Standard Text Search (e.g., "Записатись на візит")
+            var byText = frame.GetByText(searchText);
+
+            // 2. Button Name Search (Handles Icon Buttons like "День" with aria-label="День")
+            var byRole = frame.GetByRole(AriaRole.Button, new() { Name = searchText });
+
+            // 3. Explicit Label Search (Handles inputs or labeled divs)
+            var byLabel = frame.GetByLabel(searchText);
+
+            // --- COMBINE THEM ---
+            // This creates a "Super Locator" that matches if ANY of the above match
+            var combinedLocator = byText.Or(byRole).Or(byLabel);
+
+            // We use .First to ensure that if multiple matches exist, 
+            // we simply click the first one instead of crashing with a "Strict Mode" error.
+            await combinedLocator.First.HumanClickAsync();
         }
+
+        private async Task ClickExact(string searchText)
+        {
+            Console.WriteLine($"Clicking: {searchText}...");
+            var frame = await GetActiveFrame();
+
+            // ✅ FIX: specific exact match ignores the long headings and PDFs
+            var locator = frame.GetByText(searchText, new() { Exact = true });
+
+            // Fallback: If exact match fails, try the first partial match
+            if (await locator.CountAsync() == 0)
+            {
+                locator = frame.GetByText(searchText).First;
+            }
+
+            await locator.HumanClickAsync();
+        }
+
 
         private async Task ClickCheckboxOnLeft(string labelText)
         {
