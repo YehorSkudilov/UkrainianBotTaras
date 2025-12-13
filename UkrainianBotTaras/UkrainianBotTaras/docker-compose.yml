@@ -1,11 +1,16 @@
 ﻿services:
   ukrainian-bot:
-    build: .
-    container_name: ukrainian-bot
+    image: ukrainian-bot-taras
+    container_name: ukrainian-bot-taras
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
-
-    volumes:
-      - .:/app
 
     environment:
       - HEADLESS=true
+      - TZ=Europe/Kiev
+
+    volumes:
+      # ONLY data & secrets
+      - ./Data:/app/Data
