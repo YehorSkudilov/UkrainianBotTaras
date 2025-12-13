@@ -45,8 +45,6 @@ namespace UkrainianBotTaras.Src
         {
             playwright = await Playwright.CreateAsync();
 
-            bool isHeadless = Environment.GetEnvironmentVariable("HEADLESS") != "false"; // Default to true in Docker
-
             // 1. Launch with Anti-Bot Arguments
             browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
@@ -55,8 +53,7 @@ namespace UkrainianBotTaras.Src
                 {
                     "--disable-blink-features=AutomationControlled", // Hides the "Robot" flag
                     "--disable-infobars",
-                    "--window-size=1280,800",
-                    "--no-sandbox"
+                    "--window-size=1280,800"
                 },
                 IgnoreDefaultArgs = new[] { "--enable-automation" } // Removes "Chrome is controlled by..." banner
             });

@@ -17,16 +17,11 @@ class Program
         Console.InputEncoding = Encoding.UTF8;
         Console.SetOut(new ConsoleWithDateTime(Console.Out));
 
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string dataDir = Path.Combine(baseDir, "Data");
-        Directory.CreateDirectory(dataDir);
-
         var ctx = new StepsContext
         {
             BaseUrl = "https://id.e-consul.gov.ua/",
-            KeyFilePath = Path.Combine(dataDir, "Key.pfx"),
+            KeyFilePath = @"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Завірюха_А_Р_monoКЕП_2025-12-11T213412.pfx",
             KeyPassword = "$hzhehs&Q6",
-            DataDir = dataDir,
             DayOfBirth = "08",
             MonthOfBirth = "травня",
             YearOfBirth = "2006",

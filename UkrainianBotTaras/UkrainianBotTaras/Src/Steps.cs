@@ -77,8 +77,8 @@ namespace UkrainianBotTaras.Src
                     }
                     else
                     {
-                        await ScreenShot(Path.Combine(ctx.DataDir,"SS"));
-                        await DownloadPage(Path.Combine(ctx.DataDir, "DP"));
+                        await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
+                        await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
                         await Click("День");
                         await ChooseBestSlotAndProceed();
                     }
