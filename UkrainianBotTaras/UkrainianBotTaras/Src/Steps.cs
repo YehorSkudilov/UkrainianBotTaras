@@ -57,25 +57,44 @@ namespace UkrainianBotTaras.Src
                         await Click("Далі");
                         await page.WaitForTimeoutAsync(3000);
                         Task taskFillSmartDropdown = FillSmartDropdown("Країна", ctx.Country);
-                        await page.WaitForTimeoutAsync(5000);
-                        await WaitForElementToAppear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(5000);
-                        await WaitForElementToDisapear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(5000);
+                        try
+                        {
+                            await page.WaitForTimeoutAsync(5000);
+                            await WaitForElementToAppear("Завантаження...", 20000);
+                            await page.WaitForTimeoutAsync(5000);
+                            await WaitForElementToDisapear("Завантаження...", 120000);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Завантаження... happened too fast");
+                        }
                         await taskFillSmartDropdown;
                         Task taskFillSmartDropdown2 = FillSmartDropdown("Консульська установа", ctx.ConsulateName);
-                        await page.WaitForTimeoutAsync(5000);
-                        await WaitForElementToAppear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(5000);
-                        await WaitForElementToDisapear("Завантаження...", 120000);
+                        try
+                        {
+                            await page.WaitForTimeoutAsync(5000);
+                            await WaitForElementToAppear("Завантаження...", 20000);
+                            await page.WaitForTimeoutAsync(5000);
+                            await WaitForElementToDisapear("Завантаження...", 120000);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("Завантаження... happened too fast");
+                        }
                         await taskFillSmartDropdown2;
                         await Click("Далі");
                         await page.WaitForTimeoutAsync(5000);
                         Task taskFillSmartDropdown3 = FillSmartDropdown("#service", ctx.ServiceName);
-                        await page.WaitForTimeoutAsync(5000);
-                        await WaitForElementToAppear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(5000);
-                        await WaitForElementToDisapear("Завантаження...", 120000);
+                        try
+                        {
+                            await page.WaitForTimeoutAsync(5000);
+                            await WaitForElementToAppear("Завантаження...", 20000);
+                            await page.WaitForTimeoutAsync(5000);
+                            await WaitForElementToDisapear("Завантаження...", 120000);
+                        } catch(Exception e)
+                        {
+                            Console.WriteLine("Завантаження... happened too fast");
+                        }
                         await taskFillSmartDropdown3;
                         await ClickCheckboxOnLeft("Для себе");
                     }
