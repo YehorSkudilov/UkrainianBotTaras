@@ -73,13 +73,15 @@ namespace UkrainianBotTaras.Src
                         await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\SS");
                         await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\DP");
                         await Click("День");
-                        //await SaveDateToFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data", await FindAndClickBestSlot(await GetDateFromFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data")));
-                        await ChooseBestSlot();
-                        do
+                        await ChooseBestSlotAndProceed();
+                        await page.WaitForTimeoutAsync(3000);
+                        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                        if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
                         {
-                            await page.WaitForTimeoutAsync(5000);
-                            await Click("Підтвердити");
-                        } while(!await page.GetByText("Дякуємо, ми обробляємо ваш запит").IsVisibleAsync());
+                            await ClickCheckboxOnLeft("Так");
+                            await Click("Підтверджую");
+                        }
+                        await WaitForElementToAppear("Відбувається пошук активних слотів", 120000);
                     }
                     await page.ReloadAsync();
                 }
@@ -105,21 +107,28 @@ namespace UkrainianBotTaras.Src
 
         private async Task<ILocator?> FindFirstAvailableSlot()
         {
-            Console.WriteLine("🕵️ Scanning for available slots...");
+            Console.WriteLine("🕵️ Scanning for available time slots...");
             var frame = await GetActiveFrame();
 
-            // Selector: Divs with role='button' that DO NOT have "заброньовано" in the label
-            string selector = "div[role='button']:not([aria-label*='заброньовано'])";
+            // 1. Define a Regex to match time strings like "09:00" or "14:30"
+            // This ensures we ONLY pick up time slots, not headers or alerts.
+            var timePattern = new System.Text.RegularExpressions.Regex(@"\d{2}:\d{2}");
 
-            var slots = frame.Locator(selector);
+            // 2. Build the Locator chain:
+            //    A. Find all clickable buttons (divs with role='button')
+            //    B. Exclude ones that are explicitly "booked" (aria-label contains 'заброньовано')
+            //    C. Filter specifically for elements containing a Time Pattern (00:00)
+            var availableSlots = frame.Locator("div[role='button']:not([aria-label*='заброньовано'])")
+                                      .Filter(new() { HasTextRegex = timePattern });
 
-            // Check if any matching elements exist
-            if (await slots.CountAsync() > 0)
+            // 3. Check if we found anything
+            if (await availableSlots.CountAsync() > 0)
             {
-                var firstSlot = slots.First;
-                // Optional: Log what we found
-                var slotTime = await firstSlot.InnerTextAsync();
-                Console.WriteLine($"✅ Slot found: {slotTime}");
+                var firstSlot = availableSlots.First;
+
+                // Log the success
+                var timeText = await firstSlot.InnerTextAsync();
+                Console.WriteLine($"✅ Available slot found: {timeText}");
 
                 return firstSlot;
             }
@@ -128,23 +137,88 @@ namespace UkrainianBotTaras.Src
             return null;
         }
 
-        private async Task ChooseBestSlot()
+        private async Task ChooseBestSlotAndProceed()
         {
             ILocator ?bestSlot = null;
             int index = 0;
+            ILocator dateEl;
+            DateTime lastBookedDT = await GetDateFromFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data");
+            DateTime newBookedDT;
             do
             {
-                await ClickDateByIndex(index);
+                dateEl = await GetDateTabByIndex(index);
+                await dateEl.HumanClickAsync(page);
+
+
                 bestSlot = await FindFirstAvailableSlot();
                 index++;
             } while (bestSlot == null);
 
-            await Click(bestSlot);
+            newBookedDT =  await ParseAppointmentDate(dateEl, bestSlot);
+
+
+            if (lastBookedDT < newBookedDT)
+            {
+                await Click(bestSlot);
+                await SaveDateToFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data", newBookedDT);
+                await Click("Далі");
+            }
+            else
+            {
+                Console.WriteLine("❌ No better slots found than previously booked.");
+            }
         }
 
-        private async Task ClickDateByIndex(int index)
+        private async Task<DateTime> ParseAppointmentDate(ILocator dateEl, ILocator slotEl)
         {
-            Console.WriteLine($"👉 Attempting to click date at index [{index}]...");
+            // 1. Extract the raw text from the elements
+            // .Trim() removes accidental whitespace/newlines
+            string dateText = (await dateEl.InnerTextAsync()).Trim(); // e.g. "15.12.2025"
+            string slotText = (await slotEl.InnerTextAsync()).Trim(); // e.g. "09:00 - 09:10"
+
+            Console.WriteLine($"📝 Parsing: Date='{dateText}', Slot='{slotText}'");
+
+            // 2. Parse the Date Part (Strict format dd.MM.yyyy)
+            DateTime datePart;
+            try
+            {
+                datePart = DateTime.ParseExact(dateText, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (FormatException)
+            {
+                // Fallback: Sometimes the text might contain the day name (e.g. "Monday 15.12.2025")
+                // This regex finds the date pattern inside the string just in case
+                var match = System.Text.RegularExpressions.Regex.Match(dateText, @"\d{2}\.\d{2}\.\d{4}");
+                if (match.Success)
+                {
+                    datePart = DateTime.ParseExact(match.Value, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                else throw new Exception($"Unable to parse date from text: {dateText}");
+            }
+
+            // 3. Parse the Time Part
+            // We use Regex to grab the FIRST occurrence of "HH:mm".
+            // This works perfectly for "09:00" OR "09:00 - 09:10".
+            var timeMatch = System.Text.RegularExpressions.Regex.Match(slotText, @"(\d{2}):(\d{2})");
+
+            if (!timeMatch.Success)
+            {
+                throw new Exception($"Unable to parse time from slot text: {slotText}");
+            }
+
+            int hours = int.Parse(timeMatch.Groups[1].Value);
+            int minutes = int.Parse(timeMatch.Groups[2].Value);
+
+            // 4. Combine into one DateTime
+            DateTime finalDateTime = new DateTime(datePart.Year, datePart.Month, datePart.Day, hours, minutes, 0);
+
+            Console.WriteLine($"✅ Final Extracted DateTime: {finalDateTime}");
+            return finalDateTime;
+        }
+
+        private async Task<ILocator> GetDateTabByIndex(int index)
+        {
+            Console.WriteLine($"👉 Attempting to select date at index [{index}]...");
             var frame = await GetActiveFrame();
 
             // Regex to strictly match 'DD.MM.YYYY' (e.g. 15.12.2025)
@@ -156,7 +230,7 @@ namespace UkrainianBotTaras.Src
             // Get the total count of dates currently visible/loaded
             int count = await dateElements.CountAsync();
 
-            // CHECK: Throw exception if index is invalid
+            // CHECK: Throw exception if index is invalid (Fails immediately)
             if (index < 0 || index >= count)
             {
                 throw new IndexOutOfRangeException($"❌ Date index '{index}' is out of bounds. The calendar only has {count} dates available.");
@@ -164,16 +238,20 @@ namespace UkrainianBotTaras.Src
 
             // Select the specific date using .Nth()
             var targetDate = dateElements.Nth(index);
+
+            // Ensure the element actually exists/is attached (Double check)
+            if (await targetDate.CountAsync() == 0)
+            {
+                throw new Exception($"❌ Failed to retrieve date element at index {index}. Locator returned 0 elements.");
+            }
+
             var dateText = await targetDate.InnerTextAsync();
+            Console.WriteLine($"✅ Current date: {dateText}");
 
-            // Scroll horizontal bar if needed and click
-            await targetDate.ScrollIntoViewIfNeededAsync();
-            await targetDate.HumanClickAsync(page);
-
-            Console.WriteLine($"✅ Clicked date: {dateText}");
-
-            // Brief wait for slots to update
             await page.WaitForTimeoutAsync(1000);
+
+            // Returns a guaranteed non-null ILocator
+            return targetDate;
         }
 
         private async Task Click(ILocator locator)
