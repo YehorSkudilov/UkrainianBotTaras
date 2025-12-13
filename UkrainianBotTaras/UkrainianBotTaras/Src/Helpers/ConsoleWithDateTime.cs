@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace UkrainianBotTaras
 {
@@ -15,22 +13,21 @@ namespace UkrainianBotTaras
             _originalOut = originalOut;
         }
 
-        // Capture simple WriteLine(string)
         public override void WriteLine(string? value)
         {
-            var timestamp = DateTime.Now.ToString("HH:mm:ss");
+            // CHANGED HERE: Added date format
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             _originalOut.WriteLine($"[{timestamp}] {value}");
         }
 
-        // Capture WriteLine(string format, params object[]) used like Console.WriteLine("Val: {0}", 10)
         public override void WriteLine(string format, params object?[] arg)
         {
-            var timestamp = DateTime.Now.ToString("HH:mm:ss");
+            // CHANGED HERE: Added date format
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             string formatted = string.Format(format, arg);
             _originalOut.WriteLine($"[{timestamp}] {formatted}");
         }
 
-        // Required override for TextWriter
         public override Encoding Encoding => _originalOut.Encoding;
     }
 }

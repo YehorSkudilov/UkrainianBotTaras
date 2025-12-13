@@ -25,10 +25,10 @@ class Program
             DayOfBirth = "08",
             MonthOfBirth = "травня",
             YearOfBirth = "2006",
-            //Country = "Канада",
-            Country = "Італія",
-            //ConsulateName = "Генеральне Консульство України в Едмонтоні",
-            ConsulateName = "Генеральне консульство України в Мілані",
+            Country = "Канада",
+            //Country = "Італія",
+            ConsulateName = "Генеральне Консульство України в Едмонтоні",
+            //ConsulateName = "Генеральне консульство України в Мілані",
             ServiceName = "Оформлення закордонного паспорта",
         };
 
