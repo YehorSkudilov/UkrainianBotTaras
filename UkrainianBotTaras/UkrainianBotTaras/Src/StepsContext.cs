@@ -18,6 +18,6 @@ namespace UkrainianBotTaras
         public string ConsulateName { get; set; }
         public string ServiceName { get; set; }
 
-
+        public string FirstName { get; set; }
     }
 }

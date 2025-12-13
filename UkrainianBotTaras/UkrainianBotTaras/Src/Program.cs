@@ -25,7 +25,8 @@ class Program
             YearOfBirth = "2006",
             Country = "Канада",
             ConsulateName = "Генеральне Консульство України в Едмонтоні",
-            ServiceName = "Оформлення закордонного паспорта"
+            ServiceName = "Оформлення закордонного паспорта",
+            FirstName = "Анастасія"
         };
 
         bot = await Bot.CreateAsync();
