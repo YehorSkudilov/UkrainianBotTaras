@@ -50,7 +50,7 @@ namespace UkrainianBotTaras.Src
             // 1. Launch with Anti-Bot Arguments
             browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
             {
-                Headless = isHeadless,
+                Headless = false,
                 Args = new[]
                 {
                     "--disable-blink-features=AutomationControlled", // Hides the "Robot" flag
