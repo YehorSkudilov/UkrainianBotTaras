@@ -30,7 +30,7 @@ namespace UkrainianBotTaras.Src
                 {
                     await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Задачі").IsVisibleAsync())
+                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync())
                     {
                         if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync())
                         {
