@@ -1,0 +1,13 @@
+﻿services:
+  taras-bot:
+    image: ukrainian-bot-taras
+    container_name: taras-bot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - HEADLESS=true
+      - TZ=Europe/Kiev
+    volumes:
+      # Maps your local 'Data' folder to '/app/Data' in Docker
+      - ./Data:/app/Data
