@@ -56,9 +56,15 @@ namespace UkrainianBotTaras.Src
                         await FillInputComplex("рік", ctx.YearOfBirth);
                         await Click("Далі");
                         await page.WaitForTimeoutAsync(3000);
-                        await FillSmartDropdown("Країна", ctx.Country);
+                        FillSmartDropdown("Країна", ctx.Country);
+                        await WaitForElementToAppear("Завантаження...", 120000);
                         await page.WaitForTimeoutAsync(3000);
-                        await FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+                        await WaitForElementToDisapear("Завантаження...", 120000);
+                        await page.WaitForTimeoutAsync(3000);
+                        FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+                        await WaitForElementToAppear("Завантаження...", 120000);
+                        await page.WaitForTimeoutAsync(3000);
+                        await WaitForElementToDisapear("Завантаження...", 120000);
                         await Click("Далі");
                         await page.WaitForTimeoutAsync(3000);
                         await FillSmartDropdown("#service", ctx.ServiceName);
