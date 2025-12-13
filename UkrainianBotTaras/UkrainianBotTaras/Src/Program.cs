@@ -15,6 +15,8 @@ class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
+        Console.SetOut(new ConsoleWithDateTime(Console.Out));
+
         var ctx = new StepsContext
         {
             BaseUrl = "https://id.e-consul.gov.ua/",

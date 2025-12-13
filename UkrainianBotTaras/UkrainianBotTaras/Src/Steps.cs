@@ -66,8 +66,7 @@ namespace UkrainianBotTaras.Src
 
                     if (await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync())
                     {
-                        await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
-                        await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
+                        Console.WriteLine("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.");
                     }
                     else
                     {
