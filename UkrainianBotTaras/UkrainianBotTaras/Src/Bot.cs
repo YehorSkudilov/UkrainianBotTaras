@@ -20,7 +20,25 @@ namespace UkrainianBotTaras.Src
 
         public async Task RunAsync(ISteps steps)
         {
-            await steps.RunAsync(Page);
+            try
+            {
+                await steps.RunAsync(Page);
+            }
+            finally
+            {
+                // Ensure the browser closes even if steps fail
+                await CloseAsync();
+            }
+        }
+
+        public async Task CloseAsync()
+        {
+            if (browser != null)
+            {
+                Console.WriteLine("🛑 Shutting down browser...");
+                await browser.CloseAsync();
+                browser = null;
+            }
         }
 
         private async Task InitializeAsync()

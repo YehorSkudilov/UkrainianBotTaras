@@ -30,12 +30,14 @@ class Program
             ServiceName = "Оформлення закордонного паспорта",
         };
 
-        bot = await Bot.CreateAsync();
-        steps = new Steps(ctx);
 
-        await bot.RunAsync(steps);
 
-        Console.ReadLine();
+        while (true)
+        {
+            bot = await Bot.CreateAsync();
+            steps = new Steps(ctx);
+            await bot.RunAsync(steps);
+        }
+
     }
-   
 }

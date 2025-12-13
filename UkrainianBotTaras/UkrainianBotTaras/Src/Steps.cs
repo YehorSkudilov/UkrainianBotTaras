@@ -12,7 +12,7 @@ namespace UkrainianBotTaras.Src
     {
         private readonly StepsContext ctx;
         private IPage page; // Class-level variable (no underscore)
-
+        private int failedInARow = 0;
         public Steps(StepsContext ctx)
         {
             this.ctx = ctx;
@@ -21,14 +21,15 @@ namespace UkrainianBotTaras.Src
         // ENTRY POINT
         public async Task RunAsync(IPage page)
         {
-            this.page = page; // Assign to the class field
-
-            await OpenURL(ctx.BaseUrl);
-
-            while (true)
+            try
             {
-                try
+                this.page = page; // Assign to the class field
+
+                await OpenURL(ctx.BaseUrl);
+
+                while (failedInARow < 5)
                 {
+
                     await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
                     if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync())
@@ -40,7 +41,7 @@ namespace UkrainianBotTaras.Src
                             await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
                             await Click("Продовжити");
                         }
-                        
+
                         await ClickExact("Запис на візит");
                         await Click("Записатись на візит");
                         await FillInputComplex("день", ctx.DayOfBirth);
@@ -74,24 +75,19 @@ namespace UkrainianBotTaras.Src
                         await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\Garbage\DP");
                         await Click("День");
                         await ChooseBestSlotAndProceed();
-                        await page.WaitForTimeoutAsync(3000);
-                        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-                        if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
-                        {
-                            await ClickCheckboxOnLeft("Так");
-                            await Click("Підтверджую");
-                        }
-                        await WaitForElementToAppear("Відбувається пошук активних слотів", 120000);
                     }
                     await page.ReloadAsync();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"\n❌ Error: {ex.Message}");
-                    Console.WriteLine($"wStack Trace: {ex.StackTrace}");
-                    await OpenURL(ctx.BaseUrl);
+                    failedInARow = 0;
                 }
             }
+            catch (Exception ex)
+            {
+                failedInARow++;
+                Console.WriteLine($"\n❌ Error: {ex.Message}");
+                Console.WriteLine($"wStack Trace: {ex.StackTrace}");
+                await OpenURL(ctx.BaseUrl);
+            }
+            
         }
 
         // ----------------------------
@@ -161,7 +157,15 @@ namespace UkrainianBotTaras.Src
             {
                 await Click(bestSlot);
                 await SaveDateToFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data", newBookedDT);
-                await Click("Далі");
+                await Click("Підтвердити");
+
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
+                {
+                    await ClickCheckboxOnLeft("Так");
+                    await Click("Підтверджую");
+                }
+                await WaitForElementToAppear("Відбувається пошук активних слотів", 120000);
             }
             else
             {
