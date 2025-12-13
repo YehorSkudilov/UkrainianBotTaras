@@ -57,19 +57,26 @@ namespace UkrainianBotTaras.Src
                         await Click("Далі");
                         await page.WaitForTimeoutAsync(3000);
                         Task taskFillSmartDropdown = FillSmartDropdown("Країна", ctx.Country);
+                        await page.WaitForTimeoutAsync(5000);
                         await WaitForElementToAppear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(3000);
+                        await page.WaitForTimeoutAsync(5000);
                         await WaitForElementToDisapear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(3000);
+                        await page.WaitForTimeoutAsync(5000);
                         await taskFillSmartDropdown;
                         Task taskFillSmartDropdown2 = FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+                        await page.WaitForTimeoutAsync(5000);
                         await WaitForElementToAppear("Завантаження...", 120000);
-                        await page.WaitForTimeoutAsync(3000);
+                        await page.WaitForTimeoutAsync(5000);
                         await WaitForElementToDisapear("Завантаження...", 120000);
                         await taskFillSmartDropdown2;
                         await Click("Далі");
-                        await page.WaitForTimeoutAsync(3000);
-                        await FillSmartDropdown("#service", ctx.ServiceName);
+                        await page.WaitForTimeoutAsync(5000);
+                        Task taskFillSmartDropdown3 = FillSmartDropdown("#service", ctx.ServiceName);
+                        await page.WaitForTimeoutAsync(5000);
+                        await WaitForElementToAppear("Завантаження...", 120000);
+                        await page.WaitForTimeoutAsync(5000);
+                        await WaitForElementToDisapear("Завантаження...", 120000);
+                        await taskFillSmartDropdown3;
                         await ClickCheckboxOnLeft("Для себе");
                     }
 
