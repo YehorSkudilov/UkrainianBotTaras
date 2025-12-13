@@ -52,4 +52,4 @@ RUN pwsh playwright.ps1 install chromium
 # --------------------------------
 # Run
 # --------------------------------
-ENTRYPOINT ["dotnet", "]()
+ENTRYPOINT ["dotnet", "UkrainianBotTaras.dll"]
