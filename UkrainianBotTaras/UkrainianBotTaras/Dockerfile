@@ -22,9 +22,7 @@ FROM mcr.microsoft.com/playwright/dotnet:v1.49.0-noble
 WORKDIR /app
 
 # --------------------------------
-# Install required runtimes:
-#  - .NET 8 → PowerShell / Playwright
-#  - .NET 9 → Your app
+# Install runtimes
 # --------------------------------
 RUN apt-get update \
     && apt-get install -y wget ca-certificates \
@@ -36,16 +34,22 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # --------------------------------
-# Copy published app
+# 🔑 THIS IS THE CRITICAL FIX
+# --------------------------------
+ENV DOTNET_ROOT=/root/.dotnet
+ENV PATH=/root/.dotnet:$PATH
+
+# --------------------------------
+# Copy app
 # --------------------------------
 COPY --from=build /app/publish .
 
 # --------------------------------
-# Install Playwright browser
+# Install Chromium
 # --------------------------------
 RUN pwsh playwright.ps1 install chromium
 
 # --------------------------------
-# Run the bot
+# Run
 # --------------------------------
-ENTRYPOINT ["dotnet", "UkrainianBotTaras.dll"]
+ENTRYPOINT ["dotnet", "]()
