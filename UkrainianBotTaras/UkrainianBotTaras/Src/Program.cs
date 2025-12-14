@@ -20,8 +20,10 @@ class Program
 
         try
         {
+            // --------------------------------------------
             // Explicit install mode
-            if (args.Contains("install"))
+            // --------------------------------------------
+            if (args.Contains("install", StringComparer.OrdinalIgnoreCase))
             {
                 Microsoft.Playwright.Program.Main(new[] { "install" });
                 return;
@@ -32,38 +34,62 @@ class Program
 
             bool installAttempted = false;
 
+            // --------------------------------------------
+            // Main self-healing loop
+            // --------------------------------------------
             while (true)
             {
+                Bot? bot = null;
+
                 try
                 {
                     bot = await Bot.CreateAsync();
-                    steps = new Steps(ctx);
-
+                    var steps = new Steps(ctx);
 
                     await bot.RunAsync(steps);
                 }
                 catch (Microsoft.Playwright.PlaywrightException ex)
+                    when (ex.Message.Contains("Executable doesn't exist at"))
                 {
-                    if (ex.Message.Contains("Executable doesn't exist at"))
+                    if (installAttempted)
                     {
-                        installAttempted = true;
-
-                        Console.WriteLine("Playwright browsers missing. Installing...");
-                        Microsoft.Playwright.Program.Main(new[] { "install" });
-                        Console.WriteLine("Installation complete. Restarting...");
-                    }
-                    else
-                    {
-                        Console.WriteLine(ex.Message);
+                        Console.WriteLine("Playwright install already attempted. Waiting...");
+                        await Task.Delay(5000);
+                        continue;
                     }
 
+                    installAttempted = true;
+
+                    Console.WriteLine("Playwright browsers missing. Installing...");
+                    Microsoft.Playwright.Program.Main(new[] { "install" });
+                    Console.WriteLine("Installation complete. Restarting...");
+                    continue;
+                }
+                catch (Microsoft.Playwright.PlaywrightException ex)
+                {
+                    Console.WriteLine($"Playwright error: {ex.Message}");
+                    await Task.Delay(2000);
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Unhandled error: {ex}");
+                    await Task.Delay(2000);
+                    continue;
+                }
+                finally
+                {
+                    if (bot != null)
+                    {
+                        await bot.DisposeAsync();
+                    }
                 }
             }
         }
         catch (Exception ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("ERROR:");
+            Console.WriteLine("FATAL ERROR:");
             Console.WriteLine(ex);
             Console.ResetColor();
 
@@ -72,6 +98,7 @@ class Program
             Console.ReadKey();
         }
     }
+
 
     static private void SetDefaultDataDirectory(StepsContext ctx)
     {
@@ -86,20 +113,6 @@ class Program
         ctx.DataDirectory = dataDir;
             
     }
-
-    //static bool IsMissingBrowserError(Microsoft.Playwright.PlaywrightException ex)
-    //{
-    //    var msg = ex.Message ?? "";
-
-    //    return msg.Contains("Executable doesn't exist", StringComparison.OrdinalIgnoreCase)
-    //        || msg.Contains("Looks like Playwright was just installed or updated", StringComparison.OrdinalIgnoreCase)
-    //        || msg.Contains("ms-playwright", StringComparison.OrdinalIgnoreCase)
-    //        || msg.Contains("chromium-", StringComparison.OrdinalIgnoreCase)
-    //        || msg.Contains("webkit-", StringComparison.OrdinalIgnoreCase)
-    //        || msg.Contains("firefox-", StringComparison.OrdinalIgnoreCase);
-    //}
-
-
     static StepsContext LoadConfig()
     {
         const string file = "botsettings.json";
