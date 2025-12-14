@@ -9,7 +9,7 @@ namespace UkrainianBotTaras
     public class StepsContext
     {
         public string BaseUrl { get; set; }
-        public string KeyFilePath { get; set; }
+        public string DataDirectory { get; set; }
         public string KeyPassword { get; set; }
         public string DayOfBirth { get; set; }
         public string MonthOfBirth {get; set;}
@@ -17,5 +17,6 @@ namespace UkrainianBotTaras
         public string Country { get; set; }
         public string ConsulateName { get; set; }
         public string ServiceName { get; set; }
+        public string KeyFileName { get; set; }
     }
 }

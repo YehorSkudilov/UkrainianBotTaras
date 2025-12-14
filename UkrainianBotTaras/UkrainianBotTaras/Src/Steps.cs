@@ -21,7 +21,17 @@ namespace UkrainianBotTaras.Src
         // ENTRY POINT
         public async Task RunAsync(IPage page)
         {
-           
+            var (keyPath, screenshotsDir, downloadedPagesDir) =
+    EnsureDataDirectories(ctx);
+
+            if (!File.Exists(keyPath))
+            {
+                throw new FileNotFoundException(
+                    $"Key file not found: {keyPath}",
+                    keyPath
+                );
+            }
+
             this.page = page; // Assign to the class field
             try
             {
@@ -44,7 +54,7 @@ namespace UkrainianBotTaras.Src
                         if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync())
                         {
                             await Click("Особистий ключ");
-                            await UploadFile("Оберіть ключ на своєму носієві", ctx.KeyFilePath);
+                            await UploadFile("Оберіть ключ на своєму носієві", keyPath);
                             await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
                             await Click("Продовжити");
                         }
@@ -112,8 +122,8 @@ namespace UkrainianBotTaras.Src
                     }
                     else
                     {
-                        await ScreenShot(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\SS");
-                        await DownloadPage(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data\DP");
+                        await ScreenShot(screenshotsDir);
+                        await DownloadPage(downloadedPagesDir);
                         await Click("День");
                         await ChooseBestSlotAndProceed();
                     }
@@ -129,6 +139,28 @@ namespace UkrainianBotTaras.Src
                 }
             }     
         }
+
+        static (string KeysDir, string ScreenshotsDir, string DownloadedPagesDir)
+    EnsureDataDirectories(StepsContext ctx)
+        {
+            if (string.IsNullOrWhiteSpace(ctx.DataDirectory))
+                throw new InvalidOperationException("DataDirectory is not set.");
+
+            Directory.CreateDirectory(ctx.DataDirectory);
+
+            string keysDir = Path.Combine(ctx.DataDirectory, "Keys");
+            string keyPath = Path.Combine(ctx.DataDirectory, "Keys", ctx.KeyFileName);
+
+            string screenshotsDir = Path.Combine(ctx.DataDirectory, "Screenshots");
+            string downloadedPagesDir = Path.Combine(ctx.DataDirectory, "DownloadedPages");
+
+            Directory.CreateDirectory(keysDir);
+            Directory.CreateDirectory(screenshotsDir);
+            Directory.CreateDirectory(downloadedPagesDir);
+
+            return (keyPath, screenshotsDir, downloadedPagesDir);
+        }
+
 
         // ----------------------------
         // Reusable Rules
@@ -178,7 +210,7 @@ namespace UkrainianBotTaras.Src
             ILocator ?bestSlot = null;
             int index = 0;
             ILocator dateEl;
-            DateTime lastBookedDT = await GetDateFromFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data");
+            DateTime lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
             DateTime newBookedDT;
             do
             {
@@ -196,7 +228,7 @@ namespace UkrainianBotTaras.Src
             if (lastBookedDT < newBookedDT)
             {
                 await Click(bestSlot);
-                await SaveDateToFile(@"D:\GitHub\UkrainianBotTaras\UkrainianBotTaras\UkrainianBotTaras\Data", newBookedDT);
+                await SaveDateToFile(ctx.DataDirectory, newBookedDT);
                 await Click("Підтвердити");
 
                 await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
@@ -592,20 +624,6 @@ namespace UkrainianBotTaras.Src
                 // We type slowly to trigger the JS search events
                 await element.TypeAsync(value, new LocatorTypeOptions { Delay = 100 });
 
-                // 3. Wait for the listbox to appear on the MAIN PAGE (outside iframe)
-                var listbox = page.Locator("ul[role='listbox']");
-                try
-                {
-                    await listbox.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
-                }
-                catch
-                {
-                    Console.WriteLine("⚠️ Listbox didn't open. Clicking chevron as fallback...");
-                    // Fallback: Click the arrow button if typing didn't open it
-                    var parent = element.Locator("xpath=..");
-                    var chevron = parent.Locator(".MuiAutocomplete-popupIndicator");
-                    if (await chevron.IsVisibleAsync()) await chevron.ClickAsync();
-                }
             }
             else
             {
