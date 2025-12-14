@@ -39,7 +39,7 @@ namespace UkrainianBotTaras.Src
                 {
                     await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync())
+                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync() && !await page.GetByText("Консульська послуга").First.IsVisibleAsync())
                     {
                         if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync())
                         {
@@ -91,14 +91,15 @@ namespace UkrainianBotTaras.Src
                             await WaitForElementToAppear("Завантаження...", 20000);
                             await page.WaitForTimeoutAsync(5000);
                             await WaitForElementToDisapear("Завантаження...", 120000);
-                        } catch(Exception e)
+                        }
+                        catch (Exception e)
                         {
                             Console.WriteLine("Завантаження... happened too fast");
                         }
                         await taskFillSmartDropdown3;
                         await ClickCheckboxOnLeft("Для себе");
                     }
-
+                
                     await Click("Далі");
                     await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
                     await WaitForElementToDisapear("Відбувається пошук активних слотів", 120000);
