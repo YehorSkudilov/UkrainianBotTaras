@@ -14,9 +14,25 @@ class Program
     static Steps steps;
     static async Task Main(string[] args)
     {
+        StepsContext ctx = LoadConfig();
+        SetDefaultDataDirectory(ctx);
+
+
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
-        Console.SetOut(new ConsoleWithDateTime(Console.Out));
+
+        string logDir = Path.Combine(ctx.DataDirectory, "Logs");
+
+        var dailyFileWriter = new DailyRollingFileWriter(logDir);
+
+        var teeWriter = new MultiTextWriter(
+            Console.Out,
+            dailyFileWriter
+        );
+
+        Console.SetOut(new ConsoleWithDateTime(teeWriter));
+        Console.SetError(Console.Out);
+
 
         try
         {
@@ -29,8 +45,7 @@ class Program
                 return;
             }
 
-            StepsContext ctx = LoadConfig();
-            SetDefaultDataDirectory(ctx);
+
 
             bool installAttempted = false;
 
