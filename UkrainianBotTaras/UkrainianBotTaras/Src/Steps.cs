@@ -113,7 +113,7 @@ namespace UkrainianBotTaras.Src
                         await taskFillSmartDropdown3;
                         await ClickCheckboxOnLeft("Для себе");
                     }
-                
+
                     await Click("Далі");
                     await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
                     await WaitForElementToDisapear("Відбувається пошук активних слотів", 120000);
@@ -141,22 +141,22 @@ namespace UkrainianBotTaras.Src
                     Console.WriteLine($"wStack Trace: {ex.StackTrace}");
                     await OpenURL(ctx.BaseUrl);
                 }
-            }     
+            }
         }
 
         static (string KeysDir, string ScreenshotsDir, string DownloadedPagesDir)
     EnsureDataDirectories(StepsContext ctx)
         {
-            if (string.IsNullOrWhiteSpace(ctx.BotInstanceDirectory))
-                throw new InvalidOperationException("BotInstanceDirectory is not set.");
+            if (string.IsNullOrWhiteSpace(ctx.DataDirectory))
+                throw new InvalidOperationException("DataDirectory is not set.");
 
-            Directory.CreateDirectory(ctx.BotInstanceDirectory);
+            Directory.CreateDirectory(ctx.DataDirectory);
 
             string keysDir = Path.Combine(ctx.DataDirectory, "Keys");
             string keyPath = Path.Combine(ctx.DataDirectory, "Keys", ctx.KeyFileName);
 
-            string screenshotsDir = Path.Combine(ctx.BotInstanceDirectory, "Screenshots");
-            string downloadedPagesDir = Path.Combine(ctx.BotInstanceDirectory, "DownloadedPages");
+            string screenshotsDir = Path.Combine(ctx.DataDirectory, "Screenshots");
+            string downloadedPagesDir = Path.Combine(ctx.DataDirectory, "DownloadedPages");
 
             Directory.CreateDirectory(keysDir);
             Directory.CreateDirectory(screenshotsDir);
@@ -215,15 +215,15 @@ namespace UkrainianBotTaras.Src
 
         private async Task ChooseBestSlotAndProceed()
         {
-            ILocator ?bestSlot = null;
+            ILocator? bestSlot = null;
             int index = 0;
-            ILocator ?dateEl = null;
+            ILocator? dateEl = null;
             DateTime lastBookedDT;
             DateTime newBookedDT;
             do
             {
                 ILocator monthEl = await GetMonthTabByIndexAndClick(index);
-                
+
 
                 bool pageHasAvailableSlots = await FindAndClickFirstAvailableWeeklySlot();
 
@@ -236,9 +236,9 @@ namespace UkrainianBotTaras.Src
 
                     if (daysOfWeek.Count > 0)
                     {
-                        foreach(ILocator dayOfWeek in daysOfWeek)
+                        foreach (ILocator dayOfWeek in daysOfWeek)
                         {
-                            if(bestSlot == null)
+                            if (bestSlot == null)
                             {
                                 await ClickElementByTextInScope(dayOfWeek, "Показати ще");
                                 bestSlot = await FindFirstAvailableSlotInScope(dayOfWeek);
@@ -247,15 +247,15 @@ namespace UkrainianBotTaras.Src
                                     dateEl = dayOfWeek;
                                 }
                             }
-           
-                         
+
+
                         }
                     }
                 }
-                    index++;
+                index++;
             } while (bestSlot == null);
 
-            newBookedDT =  await ParseAppointmentDate(dateEl, bestSlot);
+            newBookedDT = await ParseAppointmentDate(dateEl, bestSlot);
 
             lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
             if (lastBookedDT < newBookedDT)
@@ -264,13 +264,16 @@ namespace UkrainianBotTaras.Src
                 await SaveDateToFile(ctx.DataDirectory, newBookedDT);
                 await Click("Підтвердити");
 
+                await ScreenShot(screenshotsDir);
                 await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-                await page.WaitForTimeoutAsync(3000);
+                await ScreenShot(screenshotsDir);
+                await page.WaitForTimeoutAsync(10000);
                 if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
                 {
                     await ClickCheckboxOnLeft("Так");
                     await Click("Підтверджую");
                 }
+                await ScreenShot(screenshotsDir);
                 await WaitForElementToAppear("Дякуємо, ми обробляємо ваш запит", 120000);
                 await ScreenShot(screenshotsDir);
             }
@@ -880,7 +883,7 @@ namespace UkrainianBotTaras.Src
 
             if (!await option.IsVisibleAsync())
             {
-                
+
                 option = page.Locator("li[role='option']").GetByText(optionText);
             }
 

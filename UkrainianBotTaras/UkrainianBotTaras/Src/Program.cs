@@ -126,7 +126,7 @@ class Program
         Directory.CreateDirectory(dataDir);
 
         ctx.DataDirectory = dataDir;
-
+            
     }
     static StepsContext LoadConfig()
     {
