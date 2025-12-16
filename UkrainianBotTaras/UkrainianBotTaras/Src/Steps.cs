@@ -13,10 +13,12 @@ namespace UkrainianBotTaras.Src
     {
         private readonly StepsContext ctx;
         private IPage page; // Class-level variable (no underscore)
-        private int failedInARow = 0;
         static string keyPath;
         static string screenshotsDir;
         static string downloadedPagesDir;
+        private int consecutiveFailures = 0;
+        private static readonly Random _rng = new();
+
         public Steps(StepsContext ctx)
         {
             this.ctx = ctx;
@@ -24,6 +26,37 @@ namespace UkrainianBotTaras.Src
 
         // ENTRY POINT
         public async Task RunAsync(IPage page)
+        {
+            while (true)
+            {
+                try
+                {
+                    await RunMainFlow(page);
+
+                    // Real success reached → reset counter
+                    consecutiveFailures = 0;
+                }
+                catch (Exception ex)
+                {
+                    consecutiveFailures++;
+                    Console.WriteLine($"❌ Step error: {ex.Message}");
+
+                    if (consecutiveFailures >= 5)
+                    {
+                        Console.WriteLine("🕒 Too many failures — long cooldown");
+                        await Task.Delay(TimeSpan.FromMinutes(15));
+                        consecutiveFailures = 0;
+                    }
+                    else
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(20));
+                    }
+                }
+            }
+        }
+
+
+        public async Task RunMainFlow(IPage page)
         {
             (keyPath, screenshotsDir, downloadedPagesDir) =
     EnsureDataDirectories(ctx);
@@ -37,112 +70,88 @@ namespace UkrainianBotTaras.Src
             }
 
             this.page = page; // Assign to the class field
-            try
+
+            await OpenURL(ctx.BaseUrl);
+
+            while (true)
             {
-                await OpenURL(ctx.BaseUrl);
-            }
-            catch (Exception ex)
-            {
-                failedInARow++;
-                Console.WriteLine($"\n❌ Error: {ex.Message}");
-                Console.WriteLine($"wStack Trace: {ex.StackTrace}");
-            }
-            while (failedInARow < 5)
-            {
-                try
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                await page.WaitForTimeoutAsync(5000);
+                if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync() && !await page.GetByText("Консульська послуга").First.IsVisibleAsync())
                 {
-                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-
-                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync() || await page.GetByText("Запис на візит").First.IsVisibleAsync() && !await page.GetByText("Консульська послуга").First.IsVisibleAsync())
+                    if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync())
                     {
-                        if (await page.GetByText("Вхід на Портал е-Консул").IsVisibleAsync())
-                        {
-                            await Click("Особистий ключ");
-                            await UploadFile("Оберіть ключ на своєму носієві", keyPath);
-                            await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
-                            await Click("Продовжити");
-                        }
-
-                        await ClickExact("Запис на візит");
-                        await Click("Записатись на візит");
-                        await FillInputComplex("день", ctx.DayOfBirth);
-                        await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
-                        await FillInputComplex("рік", ctx.YearOfBirth);
-                        await Click("Далі");
-                        await page.WaitForTimeoutAsync(3000);
-                        Task taskFillSmartDropdown = FillSmartDropdown("Країна", ctx.Country);
-                        try
-                        {
-                            await page.WaitForTimeoutAsync(5000);
-                            await WaitForElementToAppear("Завантаження...", 20000);
-                            await page.WaitForTimeoutAsync(5000);
-                            await WaitForElementToDisapear("Завантаження...", 120000);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("Завантаження... happened too fast");
-                        }
-                        await taskFillSmartDropdown;
-                        Task taskFillSmartDropdown2 = FillSmartDropdown("Консульська установа", ctx.ConsulateName);
-                        try
-                        {
-                            await page.WaitForTimeoutAsync(5000);
-                            await WaitForElementToAppear("Завантаження...", 20000);
-                            await page.WaitForTimeoutAsync(5000);
-                            await WaitForElementToDisapear("Завантаження...", 120000);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("Завантаження... happened too fast");
-                        }
-                        await taskFillSmartDropdown2;
-                        await Click("Далі");
-                        await page.WaitForTimeoutAsync(5000);
-                        Task taskFillSmartDropdown3 = FillSmartDropdown("#service", ctx.ServiceName);
-                        try
-                        {
-                            await page.WaitForTimeoutAsync(5000);
-                            await WaitForElementToAppear("Завантаження...", 20000);
-                            await page.WaitForTimeoutAsync(5000);
-                            await WaitForElementToDisapear("Завантаження...", 120000);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("Завантаження... happened too fast");
-                        }
-                        await taskFillSmartDropdown3;
-                        await ClickCheckboxOnLeft("Для себе");
+                        await Click("Особистий ключ");
+                        await UploadFile("Оберіть ключ на своєму носієві", keyPath);
+                        await FillInput("#id-app-login-sign-form-file-key-password", ctx.KeyPassword);
+                        await Click("Продовжити");
                     }
 
+                    await ClickExact("Запис на візит");
+                    await Click("Записатись на візит");
+                    await FillInputComplex("день", ctx.DayOfBirth);
+                    await SelectAndEnterToDropdown("місяць", ctx.MonthOfBirth);
+                    await FillInputComplex("рік", ctx.YearOfBirth);
                     await Click("Далі");
-                    await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
-                    await WaitForElementToDisapear("Відбувається пошук активних слотів", 120000);
-
                     await page.WaitForTimeoutAsync(3000);
+                    Task taskFillSmartDropdown = FillSmartDropdown("Країна", ctx.Country);
+                    await page.WaitForTimeoutAsync(5000);
+                    await taskFillSmartDropdown;
+                    Task taskFillSmartDropdown2 = FillSmartDropdown("Консульська установа", ctx.ConsulateName);
+                    await page.WaitForTimeoutAsync(5000);
+                    await taskFillSmartDropdown2;
+                    await Click("Далі");
+                    await page.WaitForTimeoutAsync(5000);
+                    Task taskFillSmartDropdown3 = FillSmartDropdown("#service", ctx.ServiceName);
+                    await page.WaitForTimeoutAsync(5000);
+                    await taskFillSmartDropdown3;
+                    await ClickCheckboxOnLeft("Для себе");
+                }
 
-                    if (await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync())
-                    {
-                        Console.WriteLine("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.");
-                    }
-                    else
-                    {
-                        await ScreenShot(screenshotsDir);
-                        await DownloadPage(downloadedPagesDir);
-                        await Click("Місяць");
-                        await ChooseBestSlotAndProceed();
-                    }
-                    await page.ReloadAsync();
-                    failedInARow = 0;
-                }
-                catch (Exception ex)
+                await Click("Далі");
+                await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
+                await WaitForElementToDisapear("Відбувається пошук активних слотів", 120000);
+
+                await page.WaitForTimeoutAsync(3000);
+
+                if (await page.GetByText("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.").IsVisibleAsync())
                 {
-                    failedInARow++;
-                    Console.WriteLine($"\n❌ Error: {ex.Message}");
-                    Console.WriteLine($"wStack Trace: {ex.StackTrace}");
-                    await OpenURL(ctx.BaseUrl);
+                    Console.WriteLine("На жаль, зараз немає вільного часу. Спробуйте пізніше або зробіть запис у чергу очікування.");
                 }
+                else
+                {
+                    await ScreenShot(screenshotsDir);
+                    await DownloadPage(downloadedPagesDir);
+                    await Click("Місяць");
+                    await ChooseBestSlotAndProceed();
+                }
+                consecutiveFailures = 0;
+                await HumanSlotReloadAsync();
             }
         }
+
+        private async Task HumanSlotReloadAsync()
+        {
+            int delaySeconds = _rng.Next(25, 70);
+
+            // Occasionally hesitate longer (human distraction)
+            if (_rng.NextDouble() < 0.2)
+            {
+                delaySeconds += _rng.Next(60, 180);
+                Console.WriteLine("😐 Taking a longer pause before refreshing...");
+            }
+
+            Console.WriteLine($"⏳ Waiting {delaySeconds}s before refresh...");
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+
+            Console.WriteLine("🔄 Refreshing slot page");
+            await page.ReloadAsync(new PageReloadOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = 120_000
+            });
+        }
+
 
         static (string KeysDir, string ScreenshotsDir, string DownloadedPagesDir)
     EnsureDataDirectories(StepsContext ctx)
@@ -712,7 +721,7 @@ namespace UkrainianBotTaras.Src
 
             // We use .First to ensure that if multiple matches exist, 
             // we simply click the first one instead of crashing with a "Strict Mode" error.
-            await combinedLocator.First.HumanClickAsync();
+            await combinedLocator.First.HumanClickAsync(page);
         }
 
         private async Task ClickExact(string searchText)
@@ -729,7 +738,7 @@ namespace UkrainianBotTaras.Src
                 locator = frame.GetByText(searchText).First;
             }
 
-            await locator.HumanClickAsync();
+            await locator.HumanClickAsync(page);
         }
 
 
@@ -757,7 +766,7 @@ namespace UkrainianBotTaras.Src
 
             var fileChooserTask = page.WaitForFileChooserAsync();
 
-            await frame.GetByText(searchText).HumanClickAsync();
+            await frame.GetByText(searchText).HumanClickAsync(page);
 
             var fileChooser = await fileChooserTask;
             await fileChooser.SetFilesAsync(filePath);
@@ -769,7 +778,7 @@ namespace UkrainianBotTaras.Src
             var frame = await GetActiveFrame();
 
             var Input = frame.Locator(searchText);
-            await Input.HumanFillAsync(input);
+            await Input.HumanFillAsync(input, page);
         }
 
         private async Task FillSmartDropdown(string identifier, string value)
