@@ -65,7 +65,8 @@ class Program
 
         var botTasks = new List<Task>();
 
-        // Set the base directory once on the template context, before cloning
+        // Call SetBaseDataDirectory on the TEMPLATE to guarantee ctx.DataDirectory is NOT null.
+        // This is the CRITICAL FIX for the ArgumentNullException.
         SetBaseDataDirectory(config.TemplateContext!);
 
         for (int i = 0; i < config.BotsCount; i++)
@@ -73,10 +74,11 @@ class Program
             // 1. Clone the template context for isolation
             StepsContext uniqueCtx = config.TemplateContext!.Clone();
 
-            // 2. Create unique subdirectory and set both BotInstanceDirectory and BotId
-            SetUniqueBotInstanceDirectory(uniqueCtx, i); // This is the single, crucial call
+            // 2. Create unique subdirectory and set paths. 
+            // This method will now correctly use the non-null ctx.DataDirectory base path.
+            SetUniqueBotInstanceDirectory(uniqueCtx, i);
 
-            // ... rest of loop (steps 3 & 4 remain the same) ...
+            // ... rest of the loop remains the same ...
             int initialDelayMs = config.LaunchDelayMs * i;
             var botTask = LaunchAndRunBotAsync(uniqueCtx, initialDelayMs);
             botTasks.Add(botTask);

@@ -1,6 +1,6 @@
 ﻿{
   "LaunchDelayMs": 10000,
-  "BotsCount": 2,
+  "BotsCount": 1,
 
   "TemplateContext": {
     "BaseUrl": "https://id.e-consul.gov.ua/",
