@@ -9,7 +9,6 @@ namespace UkrainianBotTaras
     public class StepsContext
     {
         public string BaseUrl { get; set; }
-        public string DataDirectory { get; set; }
         public string KeyPassword { get; set; }
         public string DayOfBirth { get; set; }
         public string MonthOfBirth {get; set;}
@@ -18,5 +17,13 @@ namespace UkrainianBotTaras
         public string ConsulateName { get; set; }
         public string ServiceName { get; set; }
         public string KeyFileName { get; set; }
+
+        public string BotId { get; set; }
+        public string DataDirectory { get; set; }
+        public string BotInstanceDirectory { get; set; }
+        public StepsContext Clone()
+        {
+            return (StepsContext)this.MemberwiseClone();
+        }
     }
 }

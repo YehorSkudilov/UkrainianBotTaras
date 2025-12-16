@@ -29,8 +29,4 @@
 	  <Folder Include="Properties\" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <None Include="bin\Debug\net9.0\Data\Keys\Завірюха_А_Р_monoКЕП_2025-12-11T213412.pfx" />
-	</ItemGroup>
-
 </Project>

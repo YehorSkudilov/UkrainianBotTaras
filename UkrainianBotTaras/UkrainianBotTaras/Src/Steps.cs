@@ -3,6 +3,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Security.Policy;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -13,6 +14,9 @@ namespace UkrainianBotTaras.Src
         private readonly StepsContext ctx;
         private IPage page; // Class-level variable (no underscore)
         private int failedInARow = 0;
+        static string keyPath;
+        static string screenshotsDir;
+        static string downloadedPagesDir;
         public Steps(StepsContext ctx)
         {
             this.ctx = ctx;
@@ -21,7 +25,7 @@ namespace UkrainianBotTaras.Src
         // ENTRY POINT
         public async Task RunAsync(IPage page)
         {
-            var (keyPath, screenshotsDir, downloadedPagesDir) =
+            (keyPath, screenshotsDir, downloadedPagesDir) =
     EnsureDataDirectories(ctx);
 
             if (!File.Exists(keyPath))
@@ -124,7 +128,7 @@ namespace UkrainianBotTaras.Src
                     {
                         await ScreenShot(screenshotsDir);
                         await DownloadPage(downloadedPagesDir);
-                        await Click("День");
+                        await Click("Місяць");
                         await ChooseBestSlotAndProceed();
                     }
                     await page.ReloadAsync();
@@ -143,16 +147,16 @@ namespace UkrainianBotTaras.Src
         static (string KeysDir, string ScreenshotsDir, string DownloadedPagesDir)
     EnsureDataDirectories(StepsContext ctx)
         {
-            if (string.IsNullOrWhiteSpace(ctx.DataDirectory))
-                throw new InvalidOperationException("DataDirectory is not set.");
+            if (string.IsNullOrWhiteSpace(ctx.BotInstanceDirectory))
+                throw new InvalidOperationException("BotInstanceDirectory is not set.");
 
-            Directory.CreateDirectory(ctx.DataDirectory);
+            Directory.CreateDirectory(ctx.BotInstanceDirectory);
 
             string keysDir = Path.Combine(ctx.DataDirectory, "Keys");
             string keyPath = Path.Combine(ctx.DataDirectory, "Keys", ctx.KeyFileName);
 
-            string screenshotsDir = Path.Combine(ctx.DataDirectory, "Screenshots");
-            string downloadedPagesDir = Path.Combine(ctx.DataDirectory, "DownloadedPages");
+            string screenshotsDir = Path.Combine(ctx.BotInstanceDirectory, "Screenshots");
+            string downloadedPagesDir = Path.Combine(ctx.BotInstanceDirectory, "DownloadedPages");
 
             Directory.CreateDirectory(keysDir);
             Directory.CreateDirectory(screenshotsDir);
@@ -173,21 +177,25 @@ namespace UkrainianBotTaras.Src
             await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
         }
 
-        private async Task<ILocator?> FindFirstAvailableSlot()
+
+        private async Task<ILocator?> FindFirstAvailableSlotInScope(ILocator scopeLocator)
         {
-            Console.WriteLine("🕵️ Scanning for available time slots...");
-            var frame = await GetActiveFrame();
+            Console.WriteLine("🕵️ Scanning for available time slots within the provided scope...");
+
+            // Note: We are no longer calling GetActiveFrame() here, 
+            // as the search starts from the 'scopeLocator' provided.
 
             // 1. Define a Regex to match time strings like "09:00" or "14:30"
-            // This ensures we ONLY pick up time slots, not headers or alerts.
-            var timePattern = new System.Text.RegularExpressions.Regex(@"\d{2}:\d{2}");
+            var timePattern = new Regex(@"\d{2}:\d{2}");
 
-            // 2. Build the Locator chain:
+            // 2. Build the Locator chain, starting the search from the 'scopeLocator':
             //    A. Find all clickable buttons (divs with role='button')
             //    B. Exclude ones that are explicitly "booked" (aria-label contains 'заброньовано')
             //    C. Filter specifically for elements containing a Time Pattern (00:00)
-            var availableSlots = frame.Locator("div[role='button']:not([aria-label*='заброньовано'])")
-                                      .Filter(new() { HasTextRegex = timePattern });
+
+            // The key change is calling Locator() on 'scopeLocator' instead of 'frame'
+            var availableSlots = scopeLocator.Locator("div[role='button']:not([aria-label*='заброньовано'])")
+                                             .Filter(new() { HasTextRegex = timePattern });
 
             // 3. Check if we found anything
             if (await availableSlots.CountAsync() > 0)
@@ -201,7 +209,7 @@ namespace UkrainianBotTaras.Src
                 return firstSlot;
             }
 
-            Console.WriteLine("⚠️ No available slots found.");
+            Console.WriteLine("⚠️ No available slots found in this scope.");
             return null;
         }
 
@@ -209,22 +217,47 @@ namespace UkrainianBotTaras.Src
         {
             ILocator ?bestSlot = null;
             int index = 0;
-            ILocator dateEl;
-            DateTime lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
+            ILocator ?dateEl = null;
+            DateTime lastBookedDT;
             DateTime newBookedDT;
             do
             {
-                dateEl = await GetDateTabByIndex(index);
-                await dateEl.HumanClickAsync(page);
+                ILocator monthEl = await GetMonthTabByIndexAndClick(index);
+                
 
+                bool pageHasAvailableSlots = await FindAndClickFirstAvailableWeeklySlot();
 
-                bestSlot = await FindFirstAvailableSlot();
-                index++;
+                if (pageHasAvailableSlots)
+                {
+                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                    await page.WaitForTimeoutAsync(3000);
+
+                    List<ILocator> daysOfWeek = await GetAllDailyScheduleDivsByText();
+
+                    if (daysOfWeek.Count > 0)
+                    {
+                        foreach(ILocator dayOfWeek in daysOfWeek)
+                        {
+                            if(bestSlot == null)
+                            {
+                                await ClickElementByTextInScope(dayOfWeek, "Показати ще");
+                                bestSlot = await FindFirstAvailableSlotInScope(dayOfWeek);
+                                if (bestSlot != null)
+                                {
+                                    dateEl = dayOfWeek;
+                                }
+                            }
+           
+                         
+                        }
+                    }
+                }
+                    index++;
             } while (bestSlot == null);
 
             newBookedDT =  await ParseAppointmentDate(dateEl, bestSlot);
 
-
+            lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
             if (lastBookedDT < newBookedDT)
             {
                 await Click(bestSlot);
@@ -232,12 +265,14 @@ namespace UkrainianBotTaras.Src
                 await Click("Підтвердити");
 
                 await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                await page.WaitForTimeoutAsync(3000);
                 if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
                 {
                     await ClickCheckboxOnLeft("Так");
                     await Click("Підтверджую");
                 }
-                await WaitForElementToAppear("Відбувається пошук активних слотів", 120000);
+                await WaitForElementToAppear("Дякуємо, ми обробляємо ваш запит", 120000);
+                await ScreenShot(screenshotsDir);
             }
             else
             {
@@ -245,41 +280,185 @@ namespace UkrainianBotTaras.Src
             }
         }
 
-        private async Task<DateTime> ParseAppointmentDate(ILocator dateEl, ILocator slotEl)
+        public async Task<bool> ClickElementByTextInScope(ILocator scopeLocator, string searchText)
         {
-            // 1. Extract the raw text from the elements
-            // .Trim() removes accidental whitespace/newlines
-            string dateText = (await dateEl.InnerTextAsync()).Trim(); // e.g. "15.12.2025"
-            string slotText = (await slotEl.InnerTextAsync()).Trim(); // e.g. "09:00 - 09:10"
+            Console.WriteLine($"🔍 Searching for '{searchText}' within the provided scope...");
 
-            Console.WriteLine($"📝 Parsing: Date='{dateText}', Slot='{slotText}'");
+            // Playwright Locators are chainable: calling Locator() on an existing ILocator 
+            // scopes the new search exclusively to elements contained within the parent.
 
-            // 2. Parse the Date Part (Strict format dd.MM.yyyy)
-            DateTime datePart;
+            // Build a powerful locator focused only inside the scope:
+            var targetElement = scopeLocator
+                .Locator($"text={searchText}") // Find by text (e.g., "Далі" or "Підтвердити")
+                .Or(scopeLocator.GetByRole(AriaRole.Button, new() { Name = searchText })) // Find by button role name
+                .Or(scopeLocator.GetByText(searchText, new() { Exact = true })); // Find by exact text
+
+            // Use .First to ensure only one match is returned, preventing a Strict Mode error.
+            var singleTarget = targetElement.First;
+
+            // Check if the element exists and is visible within the scope
+            if (await singleTarget.IsVisibleAsync(new() { Timeout = 5000 }))
+            {
+                Console.WriteLine($"✅ Found '{searchText}' in scope. Clicking...");
+                await singleTarget.HumanClickAsync(page);
+                return true;
+            }
+
+            Console.WriteLine($"❌ Element containing text '{searchText}' not found within the scope.");
+            return false;
+        }
+
+        public async Task<List<ILocator>> GetAllDailyScheduleDivsByText()
+        {
+            Console.WriteLine("🎯 Locating all daily schedule container divs using text as anchor...");
+            var frame = await GetActiveFrame();
+
+            // 1. Find all elements that contain a day name and date (e.g., "понеділок, 27.04.2026")
+            // This is safer than relying on class names that might change.
+            // Regex: Finds a day name followed by a comma, date, and year (in the future).
+            var dayPattern = new System.Text.RegularExpressions.Regex(@"(понеділок|вівторок|середа|четвер|п’ятниця|субота|неділя),\s\d{2}\.\d{2}\.\d{4}");
+
+            // The inner element is the <button> inside the .jss236 div.
+            var dayButtons = frame.Locator("button").Filter(new() { HasTextRegex = dayPattern });
+
+            // 2. Count them and prepare the list
+            int count = await dayButtons.CountAsync();
+            if (count == 0)
+            {
+                Console.WriteLine("⚠️ No daily schedule button elements found.");
+                return new List<ILocator>();
+            }
+
+            Console.WriteLine($"Found {count} distinct daily headers.");
+
+            var dailyContainers = new List<ILocator>();
+
+            // 3. For each button, navigate up to the correct unclassed parent <div>
+            for (int i = 0; i < count; i++)
+            {
+                var buttonLocator = dayButtons.Nth(i);
+                string dayText = await buttonLocator.InnerTextAsync();
+
+                // Use Playwright's XPath to go up: 
+                // button -> parent (.jss236) -> parent (the full daily container <div>)
+                var wholeDayContainer = buttonLocator.Locator("xpath=../..");
+
+                dailyContainers.Add(wholeDayContainer);
+                Console.WriteLine($"   -> Added container for: {dayText.Trim()}");
+            }
+
+            return dailyContainers;
+        }
+
+        public async Task<bool> FindAndClickFirstAvailableWeeklySlot()
+        {
+            Console.WriteLine("🔎 Scanning for vertical weekly slots with availability (> 0)...");
+            var frame = await GetActiveFrame();
+
+            // --- FIX: Updated selectors based on the current HTML structure (.jss314) ---
+            const string weeklySlotSelector = ".jss314"; // <-- CHANGED from .jss330
+
+            // --- CRITICAL FIX: Wait for the vertical list to be attached/visible ---
             try
             {
-                datePart = DateTime.ParseExact(dateText, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
-            }
-            catch (FormatException)
-            {
-                // Fallback: Sometimes the text might contain the day name (e.g. "Monday 15.12.2025")
-                // This regex finds the date pattern inside the string just in case
-                var match = System.Text.RegularExpressions.Regex.Match(dateText, @"\d{2}\.\d{2}\.\d{4}");
-                if (match.Success)
+                Console.WriteLine($"Awaiting attachment of weekly slot list ({weeklySlotSelector})...");
+                await frame.WaitForSelectorAsync(weeklySlotSelector, new()
                 {
-                    datePart = DateTime.ParseExact(match.Value, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
-                }
-                else throw new Exception($"Unable to parse date from text: {dateText}");
+                    State = WaitForSelectorState.Attached,
+                    Timeout = 15000
+                });
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine($"Timeout: Vertical weekly slot list ({weeklySlotSelector}) did not load within 15 seconds.");
+                return false;
             }
 
-            // 3. Parse the Time Part
-            // We use Regex to grab the FIRST occurrence of "HH:mm".
-            // This works perfectly for "09:00" OR "09:00 - 09:10".
-            var timeMatch = System.Text.RegularExpressions.Regex.Match(slotText, @"(\d{2}):(\d{2})");
+            // 1. Locator for all weekly slot elements
+            var weeklySlots = frame.Locator(weeklySlotSelector);
+            int count = await weeklySlots.CountAsync();
 
+            Console.WriteLine($"Found {count} weekly schedule entries to check.");
+
+            if (count == 0)
+            {
+                Console.WriteLine("⚠️ No weekly slots elements found on the page after waiting.");
+                return false;
+            }
+
+            // The inner element containing the slot count is now inside .jss316 (was .jss332)
+            // The inner element containing the date range is now inside .jss315 (was .jss331)
+            var statusLocators = weeklySlots.Locator(".jss316"); // <-- CHANGED from .jss332
+            var dateRangeLocators = weeklySlots.Locator(".jss315"); // <-- CHANGED from .jss331
+
+            for (int i = 0; i < count; i++)
+            {
+                var statusLocator = statusLocators.Nth(i);
+
+                // Get the text, e.g., "0 ВІЛЬНИХ СЛОТІВ" or "1 ВІЛЬНИХ СЛОТІВ"
+                string statusText = await statusLocator.InnerTextAsync();
+
+                // Parse the number of free slots
+                // Assuming ParseAvailableSlotCount is robust enough to handle the text
+                int availableSlotCount = ParseAvailableSlotCount(statusText);
+
+                var dateRangeText = await dateRangeLocators.Nth(i).InnerTextAsync();
+
+                Console.WriteLine($"   -> Checking Week {i + 1}/{count} ({dateRangeText}): {availableSlotCount} available.");
+
+                if (availableSlotCount > 0)
+                {
+                    var weeklySlotToClick = weeklySlots.Nth(i);
+                    Console.WriteLine($"✅ Available slot found for week: {dateRangeText}. Clicking to proceed.");
+
+                    await weeklySlotToClick.HumanClickAsync(page);
+                    await page.WaitForTimeoutAsync(1500); // Wait for the daily view to load
+
+                    return true;
+                }
+            }
+
+            Console.WriteLine("❌ No weekly slots found with availability (> 0).");
+            return false;
+        }
+
+
+        private int ParseAvailableSlotCount(string statusText)
+        {
+            // The format is typically "N ВІЛЬНИХ СЛОТІВ"
+            // Use Regex to robustly capture the number
+            var match = System.Text.RegularExpressions.Regex.Match(statusText, @"(\d+)\s+ВІЛЬНИХ СЛОТІВ");
+
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int count))
+            {
+                return count;
+            }
+
+            return 0; // Default to zero if parsing fails or text doesn't match the expected pattern
+        }
+
+        private async Task<DateTime> ParseAppointmentDate(ILocator dayContainer, ILocator slotEl)
+        {
+            // 1. Extract raw text from the ENTIRE DAY CONTAINER
+            string dayContainerText = (await dayContainer.InnerTextAsync()).Trim();
+            string slotTimeText = (await slotEl.InnerTextAsync()).Trim();
+
+            Console.WriteLine($"📝 Parsing: Day Container Text='{dayContainerText.Substring(0, Math.Min(dayContainerText.Length, 40))}...', Slot='{slotTimeText}'");
+
+            // 2. Parse the Date Part: Find the DD.MM.YYYY pattern within the container's text.
+            var dateMatch = Regex.Match(dayContainerText, @"\d{2}\.\d{2}\.\d{4}");
+
+            if (!dateMatch.Success)
+            {
+                throw new Exception($"Unable to parse date (DD.MM.YYYY) from day container text: {dayContainerText}");
+            }
+            DateTime datePart = DateTime.ParseExact(dateMatch.Value, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+            // 3. Parse the Time Part (unmodified)
+            var timeMatch = Regex.Match(slotTimeText, @"(\d{2}):(\d{2})");
             if (!timeMatch.Success)
             {
-                throw new Exception($"Unable to parse time from slot text: {slotText}");
+                throw new Exception($"Unable to parse time from slot text: {slotTimeText}");
             }
 
             int hours = int.Parse(timeMatch.Groups[1].Value);
@@ -292,44 +471,65 @@ namespace UkrainianBotTaras.Src
             return finalDateTime;
         }
 
-        private async Task<ILocator> GetDateTabByIndex(int index)
+        private async Task<ILocator> GetMonthTabByIndexAndClick(int index)
         {
-            Console.WriteLine($"👉 Attempting to select date at index [{index}]...");
+            Console.WriteLine($"👉 Attempting to select month tab at index [{index}]...");
             var frame = await GetActiveFrame();
 
-            // Regex to strictly match 'DD.MM.YYYY' (e.g. 15.12.2025)
-            var datePattern = new System.Text.RegularExpressions.Regex(@"^\d{2}\.\d{2}\.\d{4}$");
+            // --- Locators are based on the latest successful HTML provided ---
+            const string scrollContainerSelector = ".jss291";
+            const string tabSelector = ".jss294";
 
-            // Locate ALL elements matching the date pattern
-            var dateElements = frame.GetByText(datePattern);
+            // 1. Wait for the main scrollbar container to be stable/attached.
+            await frame.WaitForSelectorAsync(scrollContainerSelector, new()
+            {
+                State = WaitForSelectorState.Attached,
+                Timeout = 10000
+            });
 
-            // Get the total count of dates currently visible/loaded
-            int count = await dateElements.CountAsync();
+            // 2. Locate the month tabs scoped to the scroll container.
+            var scrollContainer = frame.Locator(scrollContainerSelector);
+            var monthTabs = scrollContainer.Locator(tabSelector);
 
-            // CHECK: Throw exception if index is invalid (Fails immediately)
+
+            // 3. Wait specifically for at least one tab to be visibly loaded.
+            try
+            {
+                Console.WriteLine("Awaiting visibility of the first month tab...");
+                await monthTabs.First.WaitForAsync(new()
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = 15000
+                });
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine("Warning: Month tabs failed to achieve visible state within 15s. Proceeding to count.");
+            }
+
+
+            // 4. Get the total count of tabs. This should now be > 0.
+            int count = await monthTabs.CountAsync();
+
+            // 5. CHECK: Throw exception if index is invalid
             if (index < 0 || index >= count)
             {
-                throw new IndexOutOfRangeException($"❌ Date index '{index}' is out of bounds. The calendar only has {count} dates available.");
+                throw new IndexOutOfRangeException($"❌ Month tab index '{index}' is out of bounds. The calendar only has {count} tabs available.");
             }
 
-            // Select the specific date using .Nth()
-            var targetDate = dateElements.Nth(index);
+            // 6. Select the specific tab using .Nth()
+            var targetTab = monthTabs.Nth(index);
 
-            // Ensure the element actually exists/is attached (Double check)
-            if (await targetDate.CountAsync() == 0)
-            {
-                throw new Exception($"❌ Failed to retrieve date element at index {index}. Locator returned 0 elements.");
-            }
+            // Final stability check before returning
+            await targetTab.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
+            var tabText = await targetTab.InnerTextAsync();
 
-            var dateText = await targetDate.InnerTextAsync();
-            Console.WriteLine($"✅ Current date: {dateText}");
+            Console.WriteLine($"✅ Found tab at index {index}: {tabText.Trim()}");
 
-            await page.WaitForTimeoutAsync(1000);
-
-            // Returns a guaranteed non-null ILocator
-            return targetDate;
+            Console.WriteLine($"✅ Clicking tab at index {index}: {tabText.Trim()}");
+            await targetTab.HumanClickAsync(page);
+            return targetTab;
         }
-
         private async Task Click(ILocator locator)
         {
             // 1. Safety: Use .First to avoid "Strict Mode" errors if the locator matches multiple items
