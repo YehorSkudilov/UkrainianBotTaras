@@ -1,27 +1,27 @@
 ﻿using Microsoft.Playwright;
 using System;
-using System.IO;
+using System.ComponentModel.Design.Serialization;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using UkrainianBotTaras.Src;
 
-namespace UkrainianBotTaras;
 
+namespace UkrainianBotTaras;
 class Program
 {
+    static Bot bot;
+    static Steps steps;
     static async Task Main(string[] args)
     {
         StepsContext ctx = LoadConfig();
         SetDefaultDataDirectory(ctx);
 
-        // --------------------------------------------
-        // Console + logging setup
-        // --------------------------------------------
+
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
 
         string logDir = Path.Combine(ctx.DataDirectory, "Logs");
-        Directory.CreateDirectory(logDir);
 
         var dailyFileWriter = new DailyRollingFileWriter(logDir);
 
@@ -33,51 +33,78 @@ class Program
         Console.SetOut(new ConsoleWithDateTime(teeWriter));
         Console.SetError(Console.Out);
 
-        // --------------------------------------------
-        // Explicit install mode (CLI)
-        // --------------------------------------------
-        if (args.Contains("install", StringComparer.OrdinalIgnoreCase))
-        {
-            Console.WriteLine("🔧 Installing Playwright browsers...");
-            Microsoft.Playwright.Program.Main(new[] { "install" });
-            Console.WriteLine("✅ Installation complete.");
-            return;
-        }
-
-        // --------------------------------------------
-        // Create browser (with automatic install)
-        // --------------------------------------------
-        Bot bot;
 
         try
         {
-            bot = await Bot.CreateAsync();
-        }
-        catch (PlaywrightException ex)
-            when (ex.Message.Contains("Executable doesn't exist"))
-        {
-            Console.WriteLine("⚠️ Playwright browsers missing.");
-            Console.WriteLine("🔧 Installing automatically...");
+            // --------------------------------------------
+            // Explicit install mode
+            // --------------------------------------------
+            if (args.Contains("install", StringComparer.OrdinalIgnoreCase))
+            {
+                Microsoft.Playwright.Program.Main(new[] { "install" });
+                return;
+            }
 
-            Microsoft.Playwright.Program.Main(new[] { "install" });
 
-            Console.WriteLine("✅ Installation complete. Starting browser...");
-            bot = await Bot.CreateAsync(); // retry ONCE
-        }
 
-        Steps steps = new Steps(ctx);
+            bool installAttempted = false;
 
-        // --------------------------------------------
-        // Run bot (Steps owns retries & cooldowns)
-        // --------------------------------------------
-        try
-        {
-            await bot.RunAsync(steps);
+            // --------------------------------------------
+            // Main self-healing loop
+            // --------------------------------------------
+            while (true)
+            {
+                Bot? bot = null;
+
+                try
+                {
+                    bot = await Bot.CreateAsync();
+                    var steps = new Steps(ctx);
+
+                    await bot.RunAsync(steps);
+                }
+                catch (Microsoft.Playwright.PlaywrightException ex)
+                    when (ex.Message.Contains("Executable doesn't exist at"))
+                {
+                    if (installAttempted)
+                    {
+                        Console.WriteLine("Playwright install already attempted. Waiting...");
+                        await Task.Delay(5000);
+                        continue;
+                    }
+
+                    installAttempted = true;
+
+                    Console.WriteLine("Playwright browsers missing. Installing...");
+                    Microsoft.Playwright.Program.Main(new[] { "install" });
+                    Console.WriteLine("Installation complete. Restarting...");
+                    continue;
+                }
+                catch (Microsoft.Playwright.PlaywrightException ex)
+                {
+                    Console.WriteLine($"Playwright error: {ex.Message}");
+                    await Task.Delay(2000);
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Unhandled error: {ex}");
+                    await Task.Delay(2000);
+                    continue;
+                }
+                finally
+                {
+                    if (bot != null)
+                    {
+                        await bot.DisposeAsync();
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("💥 FATAL ERROR:");
+            Console.WriteLine("FATAL ERROR:");
             Console.WriteLine(ex);
             Console.ResetColor();
 
@@ -87,10 +114,8 @@ class Program
         }
     }
 
-    // ------------------------------------------------
-    // Helpers
-    // ------------------------------------------------
-    static void SetDefaultDataDirectory(StepsContext ctx)
+
+    static private void SetDefaultDataDirectory(StepsContext ctx)
     {
         if (!string.IsNullOrWhiteSpace(ctx.DataDirectory))
             return;
@@ -99,9 +124,10 @@ class Program
         string dataDir = Path.Combine(exeDir, "Data");
 
         Directory.CreateDirectory(dataDir);
-        ctx.DataDirectory = dataDir;
-    }
 
+        ctx.DataDirectory = dataDir;
+            
+    }
     static StepsContext LoadConfig()
     {
         const string file = "botsettings.json";

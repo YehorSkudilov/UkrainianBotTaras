@@ -8,46 +8,37 @@ namespace UkrainianBotTaras
     {
         private static readonly Random _rng = new Random();
 
-        public static async Task HumanClickAsync(this ILocator locator, IPage page)
+        public static async Task HumanClickAsync(this ILocator locator, IPage? page = null)
         {
-            await Task.Delay(_rng.Next(300, 900));
+            // 1. "Thinking" pause
+            await Task.Delay(_rng.Next(300, 1000));
 
+            // 2. Get element size
             var box = await locator.BoundingBoxAsync();
             if (box == null)
             {
                 await locator.ClickAsync();
-                return;
             }
+            else
+            {
+                var width = box.Width;
+                var height = box.Height;
 
-            float targetX = (float)(
-               box.X + (box.Width * (0.2 + _rng.NextDouble() * 0.6))
-           );
+                // float casting for Playwright Position
+                var randomX = (float)((width * 0.1) + (_rng.NextDouble() * (width * 0.8)));
+                var randomY = (float)((height * 0.1) + (_rng.NextDouble() * (height * 0.8)));
 
-            float targetY = (float)(
-                box.Y + (box.Height * (0.2 + _rng.NextDouble() * 0.6))
-            );
-
-            await page.Mouse.MoveAsync(
-                targetX,
-                targetY,
-                new MouseMoveOptions { Steps = _rng.Next(10, 25) }
-            );
-
-            await Task.Delay(_rng.Next(80, 200));
-
-            await page.Mouse.DownAsync();
-            await Task.Delay(_rng.Next(50, 120));
-            await page.Mouse.UpAsync();
+                await locator.ClickAsync(new LocatorClickOptions
+                {
+                    Position = new Position { X = randomX, Y = randomY }
+                });
+            }
         }
 
-
-        public static async Task HumanFillAsync(this ILocator locator, string text, IPage page)
+        public static async Task HumanFillAsync(this ILocator locator, string text, IPage? page = null)
         {
             await locator.HumanClickAsync(page); // Pass page to click first
-            await locator.ClickAsync();
-            await page.Keyboard.PressAsync("Control+A");
-            await Task.Delay(_rng.Next(50, 120));
-            await page.Keyboard.PressAsync("Backspace");
+            await locator.ClearAsync();
 
             foreach (char c in text)
             {
