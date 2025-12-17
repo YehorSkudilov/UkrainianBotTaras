@@ -355,64 +355,70 @@ namespace UkrainianBotTaras.Src
 
         public async Task<bool> FindAndClickFirstAvailableWeeklySlot()
         {
-            Console.WriteLine("🔎 Scanning for vertical weekly slots with availability (> 0)...");
             var frame = await GetActiveFrame();
+            Console.WriteLine("🔎 [SlotSearch] Scanning for weekly slots...");
 
-            // 1. Target the slots using a stable text pattern (DD.MM.YYYY — DD.MM.YYYY)
-            // This replaces the fragile .jss314
-            var weeklySlots = frame.Locator("div").Filter(new()
-            {
-                HasTextString = "re:\\d{2}\\.\\d{2}\\.\\d{4} — \\d{2}\\.\\d{2}\\.\\d{4}"
-            });
-
-            // 2. Wait for the list to appear
+            // 1. SPINNER GUARD: Wait for loader to disappear
             try
             {
-                Console.WriteLine("Awaiting attachment of weekly slot list using text patterns...");
-                await weeklySlots.First.WaitForAsync(new()
+                var loader = frame.GetByText("Відбувається пошук активних слотів");
+                if (await loader.IsVisibleAsync(new() { Timeout = 3000 }))
                 {
-                    State = WaitForSelectorState.Visible,
-                    Timeout = 15000
-                });
+                    Console.WriteLine("⌛ [SlotSearch] Waiting for loader to finish...");
+                    await loader.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 60000 });
+                }
             }
-            catch (Exception)
+            catch { }
+
+            // 2. STABLE LOCATOR: Find elements by their structural relationship.
+            // Instead of just Regex, we look for DIVs that have "ВІЛЬНИХ СЛОТІВ" inside them.
+            // This is much harder to break than a date regex.
+            var slotContainers = frame.Locator("div").Filter(new()
             {
-                Console.WriteLine("Timeout: Vertical weekly slot list did not load via text pattern.");
+                Has = frame.Locator("div").GetByText("ВІЛЬНИХ СЛОТІВ")
+            });
+
+            // 3. POLLING WAIT: Wait for at least one slot container to appear.
+            try
+            {
+                await slotContainers.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 12000 });
+            }
+            catch
+            {
+                Console.WriteLine("⚠️ [SlotSearch] No slot containers appeared after 12s.");
                 return false;
             }
 
-            int count = await weeklySlots.CountAsync();
-            Console.WriteLine($"Found {count} weekly schedule entries to check.");
+            int count = await slotContainers.CountAsync();
+            Console.WriteLine($"📊 [SlotSearch] Found {count} weeks to scan.");
 
             for (int i = 0; i < count; i++)
             {
-                var currentSlot = weeklySlots.Nth(i);
+                var slot = slotContainers.Nth(i);
+                string rawText = await slot.InnerTextAsync();
 
-                // Find the "status" text inside the current slot (e.g., "0 ВІЛЬНИХ СЛОТІВ")
-                // We look for any div containing "ВІЛЬНИХ СЛОТІВ" instead of .jss316
-                var statusLocator = currentSlot.Locator("div").Filter(new() { HasTextString = "ВІЛЬНИХ СЛОТІВ" });
-                var dateLocator = currentSlot.Locator("div").Filter(new() { HasTextString = " — " });
+                // Use your Parse logic
+                int freeSlots = ParseAvailableSlotCount(rawText);
 
-                string statusText = await statusLocator.InnerTextAsync();
-                string dateRangeText = await dateLocator.First.InnerTextAsync();
+                // Robustly find the date line for logging even if Regex is finicky
+                string dateLine = rawText.Split('\n')[0].Trim();
+                Console.WriteLine($"   -> Week {i + 1}: [{dateLine}] | Found: {freeSlots}");
 
-                int availableSlotCount = ParseAvailableSlotCount(statusText);
-
-                Console.WriteLine($"   -> Checking Week {i + 1}/{count} ({dateRangeText.Trim()}): {availableSlotCount} available.");
-
-                if (availableSlotCount > 0)
+                if (freeSlots > 0)
                 {
-                    Console.WriteLine($"✅ Available slot found for week: {dateRangeText.Trim()}. Clicking to proceed.");
+                    Console.WriteLine($"✅ [SlotSearch] SUCCESS! Clicking range: {dateLine}");
 
-                    // Use Force = true to bypass potential visibility issues with the scroll container
-                    await currentSlot.ClickAsync(new() { Force = true });
+                    // ACTION: Scroll and Click with Force to bypass Mui overlays
+                    await slot.ScrollIntoViewIfNeededAsync();
+                    await slot.ClickAsync(new() { Force = true });
 
-                    await page.WaitForTimeoutAsync(1500);
+                    // Final verification: Wait a moment for the Daily view to start loading
+                    await page.WaitForTimeoutAsync(2000);
                     return true;
                 }
             }
 
-            Console.WriteLine("❌ No weekly slots found with availability (> 0).");
+            Console.WriteLine("❌ [SlotSearch] All visible weeks are full (0 slots).");
             return false;
         }
         private int ParseAvailableSlotCount(string statusText)
@@ -465,67 +471,48 @@ namespace UkrainianBotTaras.Src
 
         private async Task<ILocator> GetMonthTabByIndexAndClick(int index)
         {
-            Console.WriteLine($"👉 Attempting to select month tab at index [{index}]...");
             var frame = await GetActiveFrame();
+            Console.WriteLine($"📅 [MonthSelector] Targeting index {index}...");
 
-            // 1. Locate the main scroll container using the stable 'saveref' attribute
-            // This avoids the dynamic .jssXXX classes found in the header
+            // 1. Target the scroll container using the stable attribute
             var scrollContainer = frame.Locator("div[saveref='calendarScrollBarRef']");
 
-            // 2. Identify month tabs by searching for Ukrainian month-year patterns
-            // e.g., "грудень 2025" or "січень 2026"
-            var monthTabs = scrollContainer.Locator("div").Filter(new()
+            // 2. REFINE SELECTOR: Target only the immediate children that contain the year.
+            // This prevents the '14 tabs' issue caused by counting nested divs.
+            var monthTabs = scrollContainer.Locator("> div").Filter(new()
             {
-                // Playwright uses "re:" prefix for regex strings
-                HasTextString = "re:^[а-яіїє]+ 202[0-9]$ "
+                HasTextString = "202"
             });
 
-            // 3. Wait for the calendar to load at least one tab
+            // 3. Wait for the UI to populate
             try
             {
-                await monthTabs.First.WaitForAsync(new() { State = WaitForSelectorState.Attached, Timeout = 10000 });
+                await monthTabs.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
             }
-            catch (Exception)
+            catch
             {
-                throw new Exception("❌ Calendar months failed to load within 10 seconds.");
+                Console.WriteLine("❌ [MonthSelector] Error: No month tabs found in DOM after 10s.");
+                throw new Exception("Calendar month tabs missing.");
             }
 
             int count = await monthTabs.CountAsync();
-            Console.WriteLine($"🔎 Found {count} available month tabs.");
+            Console.WriteLine($"🔎 [MonthSelector] Found {count} unique months available.");
 
-            // 4. Bounds check to prevent the index-out-of-range errors seen in your logs
             if (index < 0 || index >= count)
             {
-                Console.WriteLine($"⚠️ Requested index {index} is invalid. Max index is {count - 1}.");
+                Console.WriteLine($"⚠️ [MonthSelector] Index {index} is out of bounds (0-{count - 1}).");
                 return null;
             }
 
             var targetTab = monthTabs.Nth(index);
-            var tabLabel = await targetTab.InnerTextAsync();
+            var labelText = (await targetTab.InnerTextAsync()).Replace("\n", " ").Trim();
 
-            // 5. Interaction: Use Force = true
-            // Because the site uses a custom JS scrollbar, standard visibility checks 
-            // often fail even if the element is in the DOM
-            await targetTab.ClickAsync(new() { Force = true });
+            // 4. INTERACTION: Ensure the element is scrolled into view and click programmatically
+            // DispatchEvent bypasses CSS masks that often 'hide' these tabs from standard clicks.
+            await targetTab.ScrollIntoViewIfNeededAsync();
+            await targetTab.DispatchEventAsync("click");
 
-            Console.WriteLine($"✅ Successfully clicked month: {tabLabel.Replace("\n", " ").Trim()}");
-
-            // 6. Post-click: Wait for the slot list to update.
-            // Instead of .jss314, we search for the date range pattern in the slots below
-            var weeklySlotsSelector = frame.Locator("div").Filter(new()
-            {
-                HasTextString = "re:\\d{2}\\.\\d{2}\\.\\d{4} — \\d{2}\\.\\d{2}\\.\\d{4}"
-            });
-
-            try
-            {
-                await weeklySlotsSelector.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
-            }
-            catch
-            {
-                Console.WriteLine("⚠️ Month clicked, but slots didn't appear (possibly no dates available).");
-            }
-
+            Console.WriteLine($"✅ [MonthSelector] Clicked month [{index}]: {labelText}");
             return targetTab;
         }
         private async Task Click(ILocator locator)
