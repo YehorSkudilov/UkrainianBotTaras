@@ -27,6 +27,7 @@
 
 	<ItemGroup>
 	  <Folder Include="Properties\" />
+	  <Folder Include="testSettings\" />
 	</ItemGroup>
 
 	<ItemGroup>
