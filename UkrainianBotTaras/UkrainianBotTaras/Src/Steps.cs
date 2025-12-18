@@ -111,7 +111,7 @@ namespace UkrainianBotTaras.Src
                             Console.WriteLine("Завантаження... happened too fast");
                         }
                         await taskFillSmartDropdown3;
-                        await ClickCheckboxOnLeft("Для себе");
+                        await ClickRadioByLabel("Для себе");
                     }
 
                     await Click("Далі");
@@ -261,21 +261,24 @@ namespace UkrainianBotTaras.Src
             if (lastBookedDT < newBookedDT)
             {
                 await Click(bestSlot);
-                await SaveDateToFile(ctx.DataDirectory, newBookedDT);
                 await Click("Підтвердити");
 
                 await ScreenShot(screenshotsDir);
                 await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                await WaitForElementToAppear("Зачекайте, будь ласка, відбувається перевірка", 60000);
+                await WaitForElementToDisapear("Зачекайте, будь ласка, відбувається перевірка", 1200000);
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                await page.WaitForTimeoutAsync(5000);
                 await ScreenShot(screenshotsDir);
-                await page.WaitForTimeoutAsync(10000);
                 if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
                 {
-                    await ClickCheckboxOnLeft("Так");
+                    await ClickRadioByLabel("Так");
                     await Click("Підтверджую");
                 }
                 await ScreenShot(screenshotsDir);
                 await WaitForElementToAppear("Дякуємо, ми обробляємо ваш запит", 120000);
                 await ScreenShot(screenshotsDir);
+                await SaveDateToFile(ctx.DataDirectory, newBookedDT);
             }
             else
             {
@@ -358,7 +361,7 @@ namespace UkrainianBotTaras.Src
             var frame = await GetActiveFrame();
             Console.WriteLine("🔎 [SlotSearch] Scanning for weekly slots...");
 
-            // 1. SPINNER GUARD: Wait for loader to disappear
+            // 1. Loader Guard
             try
             {
                 var loader = frame.GetByText("Відбувається пошук активних слотів");
@@ -368,24 +371,21 @@ namespace UkrainianBotTaras.Src
                     await loader.WaitForAsync(new() { State = WaitForSelectorState.Hidden, Timeout = 60000 });
                 }
             }
-            catch { }
+            catch { /* Ignore timeout if loader never appeared */ }
 
-            // 2. STABLE LOCATOR: Find elements by their structural relationship.
-            // Instead of just Regex, we look for DIVs that have "ВІЛЬНИХ СЛОТІВ" inside them.
-            // This is much harder to break than a date regex.
+            // 2. Locate Containers
             var slotContainers = frame.Locator("div").Filter(new()
             {
                 Has = frame.Locator("div").GetByText("ВІЛЬНИХ СЛОТІВ")
             });
 
-            // 3. POLLING WAIT: Wait for at least one slot container to appear.
             try
             {
                 await slotContainers.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 12000 });
             }
             catch
             {
-                Console.WriteLine("⚠️ [SlotSearch] No slot containers appeared after 12s.");
+                Console.WriteLine("⚠️ [SlotSearch] No slot containers appeared.");
                 return false;
             }
 
@@ -394,31 +394,32 @@ namespace UkrainianBotTaras.Src
 
             for (int i = 0; i < count; i++)
             {
-                var slot = slotContainers.Nth(i);
-                string rawText = await slot.InnerTextAsync();
-
-                // Use your Parse logic
+                var container = slotContainers.Nth(i);
+                string rawText = await container.InnerTextAsync();
                 int freeSlots = ParseAvailableSlotCount(rawText);
 
-                // Robustly find the date line for logging even if Regex is finicky
                 string dateLine = rawText.Split('\n')[0].Trim();
                 Console.WriteLine($"   -> Week {i + 1}: [{dateLine}] | Found: {freeSlots}");
 
                 if (freeSlots > 0)
                 {
-                    Console.WriteLine($"✅ [SlotSearch] SUCCESS! Clicking range: {dateLine}");
+                    Console.WriteLine($"✅ [SlotSearch] SUCCESS! Attempting human click on: {dateLine}");
 
-                    // ACTION: Scroll and Click with Force to bypass Mui overlays
-                    await slot.ScrollIntoViewIfNeededAsync();
-                    await slot.ClickAsync(new() { Force = true });
+                    // Use .First to avoid the "strict mode violation" if multiple text nodes exist
+                    var targetElement = container.GetByText("ВІЛЬНИХ СЛОТІВ").First;
 
-                    // Final verification: Wait a moment for the Daily view to start loading
-                    await page.WaitForTimeoutAsync(2000);
+                    await targetElement.ScrollIntoViewIfNeededAsync();
+
+                    // Using your HumanExtensions
+                    await targetElement.HumanClickAsync();
+
+                    // Give it time to load the daily schedule
+                    await Task.Delay(2000);
                     return true;
                 }
             }
 
-            Console.WriteLine("❌ [SlotSearch] All visible weeks are full (0 slots).");
+            Console.WriteLine("❌ [SlotSearch] All visible weeks are full.");
             return false;
         }
         private int ParseAvailableSlotCount(string statusText)
@@ -715,22 +716,21 @@ namespace UkrainianBotTaras.Src
         }
 
 
-        private async Task ClickCheckboxOnLeft(string labelText)
+        private async Task ClickRadioByLabel(string labelText)
         {
-            Console.WriteLine($"Clicking checkbox for: '{labelText}'...");
+            Console.WriteLine($"Clicking radio button for: '{labelText}'...");
             var frame = await GetActiveFrame();
 
-            // Strategy: Find the <label> container that has the text, then find the checkbox inside it.
-            // This is safer than :left-of because they are grouped together in the HTML.
-            var labelContainer = frame.Locator("label").Filter(new() { HasText = labelText }).First;
+            // Find the <label> element that contains the text
+            var label = frame.Locator("label").Filter(new() { HasText = labelText }).First;
 
-            // Find the visual checkbox span inside that label
-            var checkbox = labelContainer.Locator(".MuiCheckbox-root");
+            // Find the clickable span inside the label (the visual radio button)
+            var clickableSpan = label.Locator("span.MuiButtonBase-root");
 
-            // Scroll it into view and click
-            await checkbox.ScrollIntoViewIfNeededAsync();
-            await checkbox.HumanClickAsync(page);
+            await clickableSpan.ScrollIntoViewIfNeededAsync();
+            await clickableSpan.ClickAsync();
         }
+
 
         private async Task UploadFile(string searchText, string filePath)
         {

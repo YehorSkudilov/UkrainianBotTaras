@@ -58,7 +58,7 @@ class Program
 
                 try
                 {
-                    bot = await Bot.CreateAsync();
+                    bot = await Bot.CreateAsync(ctx);
                     var steps = new Steps(ctx);
 
                     await bot.RunAsync(steps);

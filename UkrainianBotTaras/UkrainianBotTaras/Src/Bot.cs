@@ -11,10 +11,10 @@ namespace UkrainianBotTaras.Src
         private IBrowserContext? context; 
         private IPage? page;
 
-        public static async Task<Bot> CreateAsync()
+        public static async Task<Bot> CreateAsync(StepsContext ctx)
         {
             var bot = new Bot();
-            await bot.InitializeAsync();
+            await bot.InitializeAsync(ctx);
             return bot;
         }
 
@@ -41,51 +41,38 @@ namespace UkrainianBotTaras.Src
             }
         }
 
-        private async Task InitializeAsync()
+        private async Task InitializeAsync(StepsContext ctx)
         {
             playwright = await Playwright.CreateAsync();
 
-            // 1. Launch with Anti-Bot Arguments
-            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-            {
-                Headless = false,
-                Args = new[]
+            string userDataDir = Path.Combine(ctx.DataDirectory, "BrowserProfile");
+
+            // Launch persistent context (auto-reuses storage)
+            context = await playwright.Chromium.LaunchPersistentContextAsync(
+                userDataDir,
+                new BrowserTypeLaunchPersistentContextOptions
                 {
-                    "--disable-blink-features=AutomationControlled", // Hides the "Robot" flag
-                    "--disable-infobars",
-                    "--window-size=1280,800"
-                },
-                IgnoreDefaultArgs = new[] { "--enable-automation" } // Removes "Chrome is controlled by..." banner
-            });
+                    Headless = false,
+                    Args = new[] { "--disable-blink-features=AutomationControlled" },
+                    ViewportSize = new ViewportSize { Width = 1280, Height = 800 },
+                    Locale = "uk-UA",
+                    TimezoneId = "Europe/Kiev"
+                }
+            );
 
-            // 2. Create Context to manage User Agent & Scripts
-            context = await browser.NewContextAsync(new BrowserNewContextOptions
-            {
-                // Spoof a real Windows 10 User Agent
-                UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-                ViewportSize = new ViewportSize { Width = 1280, Height = 800 },
-                Locale = "uk-UA", // Set locale to Ukrainian for authenticity
-                TimezoneId = "Europe/Kiev"
-            });
+            // Increase timeouts
+            context.SetDefaultTimeout(120000);
+            context.SetDefaultNavigationTimeout(120000);
 
-            // ---------------------------------------------------------
-            // INCREASE TIMEOUTS HERE
-            // ---------------------------------------------------------
-            // 60000ms = 60 seconds (Double the default)
-            context.SetDefaultTimeout(120000);           // For actions (Click, Fill, WaitForSelector)
-            context.SetDefaultNavigationTimeout(120000); // For Page.GotoAsync, WaitForLoadState
-            // ---------------------------------------------------------
-
-            // 3. Inject the Stealth Script
-            // This runs before the page loads to delete the 'webdriver' property
+            // Inject stealth script
             await context.AddInitScriptAsync(@"
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            ");
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+    ");
 
-            // 4. Create Page from the stealth Context
-            page = await context.NewPageAsync();
+            // Use existing page if available
+            page = context.Pages.Count > 0 ? context.Pages[0] : await context.NewPageAsync();
         }
 
         private IPage Page =>
