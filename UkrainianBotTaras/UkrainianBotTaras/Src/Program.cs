@@ -4,7 +4,7 @@ using System.ComponentModel.Design.Serialization;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using UkrainianBotTaras.Src;
+using UkrainianBotTaras;
 
 
 namespace UkrainianBotTaras;

@@ -7,10 +7,12 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
-namespace UkrainianBotTaras.Src
+namespace UkrainianBotTaras
 {
+
     internal class Steps : ISteps
     {
+        private static readonly Random random = new Random();
         private readonly StepsContext ctx;
         private IPage page; // Class-level variable (no underscore)
         private int failedInARow = 0;
@@ -113,10 +115,10 @@ namespace UkrainianBotTaras.Src
                         await taskFillSmartDropdown3;
                         await ClickRadioByLabel("Для себе");
                     }
-
+                    await RandomDelay(500, 5000);
                     await Click("Далі");
-                    await WaitForElementToAppear("Відбувається пошук активних слотів", 10000);
-                    await WaitForElementToDisapear("Відбувається пошук активних слотів", 120000);
+                    await WaitForElementToAppear("Відбувається пошук активних слотів", 30000);
+                    await WaitForElementToDisapear("Відбувається пошук активних слотів", 240000);
 
                     await page.WaitForTimeoutAsync(3000);
 
@@ -131,6 +133,7 @@ namespace UkrainianBotTaras.Src
                         await Click("Місяць");
                         await ChooseBestSlotAndProceed();
                     }
+                    await RandomDelay(5000, 120000);
                     await page.ReloadAsync();
                     failedInARow = 0;
                 }
@@ -870,6 +873,13 @@ namespace UkrainianBotTaras.Src
             }
 
             await option.HumanClickAsync(page);
+        }
+
+        private async Task RandomDelay(int minMs, int maxMs)
+        {
+            int delay = random.Next(minMs, maxMs);
+            Console.WriteLine($"⏱ Random delay: {delay} ms");
+            await page.WaitForTimeoutAsync(delay);
         }
 
         private async Task FillInputComplex(string text, string value)
