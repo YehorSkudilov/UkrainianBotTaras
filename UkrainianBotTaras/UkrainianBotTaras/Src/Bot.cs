@@ -51,8 +51,7 @@ namespace UkrainianBotTaras.Src
                 // Match your target's dual-monitor offset
                 "--window-position=-1920,0"
                     },
-                    ViewportSize = new ViewportSize { Width = 1920, Height = 911 },
-
+                    ViewportSize = new ViewportSize { Width = 1280, Height = 720 },
                     // Canada BC Localization
                     Locale = "en-US",
                     TimezoneId = "America/Vancouver",
