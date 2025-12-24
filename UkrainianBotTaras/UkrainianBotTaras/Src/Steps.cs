@@ -261,7 +261,8 @@ namespace UkrainianBotTaras
             newBookedDT = await ParseAppointmentDate(dateEl, bestSlot);
 
             lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
-            if (lastBookedDT < newBookedDT)
+            // Only rebook if the new slot is EARLIER than the one we already have
+            if (lastBookedDT == DateTime.MinValue || newBookedDT < lastBookedDT)
             {
                 await Click(bestSlot);
                 await Click("Підтвердити");
