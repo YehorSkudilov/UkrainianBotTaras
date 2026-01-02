@@ -9,5 +9,11 @@
 
   "Country": "Німеччина",
   "ConsulateName": "Генеральне консульство України в Гамбурзі",
-  "ServiceName": "Оформлення закордонного паспорта"
+  "ServiceName": "Оформлення закордонного паспорта",
+
+  "ForYourself": true,
+
+  "ChildName": "",
+  "ChildMiddleName": "",
+  "ChildLastName": ""
 }

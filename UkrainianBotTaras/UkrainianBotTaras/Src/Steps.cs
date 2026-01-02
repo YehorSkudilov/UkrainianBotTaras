@@ -9,16 +9,16 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace UkrainianBotTaras
 {
-
     internal class Steps : ISteps
     {
         private static readonly Random random = new Random();
+        private static string keyPath;
+        private static string screenshotsDir;
+        private static string downloadedPagesDir;
         private readonly StepsContext ctx;
         private IPage page; // Class-level variable (no underscore)
         private int failedInARow = 0;
-        static string keyPath;
-        static string screenshotsDir;
-        static string downloadedPagesDir;
+
         public Steps(StepsContext ctx)
         {
             this.ctx = ctx;
@@ -113,7 +113,17 @@ namespace UkrainianBotTaras
                             Console.WriteLine("Завантаження... happened too fast");
                         }
                         await taskFillSmartDropdown3;
-                        await ClickRadioByLabel("Для себе");
+                        if (ctx.ForYourself)
+                        {
+                            await ClickRadioByLabel("Для себе");
+                        }
+                        else
+                        {
+                            await ClickRadioByLabel("Для своєї дитини, підопічного");
+                            await FillInputComplex("Прізвище", ctx.ChildLastName);
+                            await FillInputComplex("Ім'я", ctx.ChildName);
+                            await FillInputComplex("По батькові", ctx.ChildMiddleName);
+                        }
                     }
                     await RandomDelay(500, 5000);
                     await Click("Далі");
@@ -147,154 +157,11 @@ namespace UkrainianBotTaras
             }
         }
 
-        static (string KeysDir, string ScreenshotsDir, string DownloadedPagesDir)
-    EnsureDataDirectories(StepsContext ctx)
-        {
-            if (string.IsNullOrWhiteSpace(ctx.DataDirectory))
-                throw new InvalidOperationException("DataDirectory is not set.");
-
-            Directory.CreateDirectory(ctx.DataDirectory);
-
-            string keysDir = Path.Combine(ctx.DataDirectory, "Keys");
-            string keyPath = Path.Combine(ctx.DataDirectory, "Keys", ctx.KeyFileName);
-
-            string screenshotsDir = Path.Combine(ctx.DataDirectory, "Screenshots");
-            string downloadedPagesDir = Path.Combine(ctx.DataDirectory, "DownloadedPages");
-
-            Directory.CreateDirectory(keysDir);
-            Directory.CreateDirectory(screenshotsDir);
-            Directory.CreateDirectory(downloadedPagesDir);
-
-            return (keyPath, screenshotsDir, downloadedPagesDir);
-        }
-
-
-        // ----------------------------
-        // Reusable Rules
-        // ----------------------------
-
-        private async Task OpenURL(string url)
-        {
-            Console.WriteLine($"Opening url: {url}...");
-            await page.GotoAsync(url);
-            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-        }
-
-
-        private async Task<ILocator?> FindFirstAvailableSlotInScope(ILocator scopeLocator)
-        {
-            Console.WriteLine("🕵️ Scanning for available time slots within the provided scope...");
-
-            // Note: We are no longer calling GetActiveFrame() here, 
-            // as the search starts from the 'scopeLocator' provided.
-
-            // 1. Define a Regex to match time strings like "09:00" or "14:30"
-            var timePattern = new Regex(@"\d{2}:\d{2}");
-
-            // 2. Build the Locator chain, starting the search from the 'scopeLocator':
-            //    A. Find all clickable buttons (divs with role='button')
-            //    B. Exclude ones that are explicitly "booked" (aria-label contains 'заброньовано')
-            //    C. Filter specifically for elements containing a Time Pattern (00:00)
-
-            // The key change is calling Locator() on 'scopeLocator' instead of 'frame'
-            var availableSlots = scopeLocator.Locator("div[role='button']:not([aria-label*='заброньовано'])")
-                                             .Filter(new() { HasTextRegex = timePattern });
-
-            // 3. Check if we found anything
-            if (await availableSlots.CountAsync() > 0)
-            {
-                var firstSlot = availableSlots.First;
-
-                // Log the success
-                var timeText = await firstSlot.InnerTextAsync();
-                Console.WriteLine($"✅ Available slot found: {timeText}");
-
-                return firstSlot;
-            }
-
-            Console.WriteLine("⚠️ No available slots found in this scope.");
-            return null;
-        }
-
-        private async Task ChooseBestSlotAndProceed()
-        {
-            ILocator? bestSlot = null;
-            int index = 0;
-            ILocator? dateEl = null;
-            DateTime lastBookedDT;
-            DateTime newBookedDT;
-            do
-            {
-                ILocator monthEl = await GetMonthTabByIndexAndClick(index);
-
-
-                bool pageHasAvailableSlots = await FindAndClickFirstAvailableWeeklySlot();
-
-                if (pageHasAvailableSlots)
-                {
-                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-                    await page.WaitForTimeoutAsync(3000);
-
-                    List<ILocator> daysOfWeek = await GetAllDailyScheduleDivsByText();
-
-                    if (daysOfWeek.Count > 0)
-                    {
-                        foreach (ILocator dayOfWeek in daysOfWeek)
-                        {
-                            if (bestSlot == null)
-                            {
-                                await ClickElementByTextInScope(dayOfWeek, "Показати ще");
-                                bestSlot = await FindFirstAvailableSlotInScope(dayOfWeek);
-                                if (bestSlot != null)
-                                {
-                                    dateEl = dayOfWeek;
-                                }
-                            }
-
-
-                        }
-                    }
-                }
-                index++;
-            } while (bestSlot == null);
-
-            newBookedDT = await ParseAppointmentDate(dateEl, bestSlot);
-
-            lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
-            // Only rebook if the new slot is EARLIER than the one we already have
-            if (lastBookedDT == DateTime.MinValue || newBookedDT < lastBookedDT)
-            {
-                await Click(bestSlot);
-                await Click("Підтвердити");
-
-                await ScreenShot(screenshotsDir);
-                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-                await WaitForElementToAppear("Зачекайте, будь ласка, відбувається перевірка", 60000);
-                await WaitForElementToDisapear("Зачекайте, будь ласка, відбувається перевірка", 1200000);
-                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-                await page.WaitForTimeoutAsync(5000);
-                await ScreenShot(screenshotsDir);
-                if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
-                {
-                    await ClickRadioByLabel("Так");
-                    await Click("Підтверджую");
-                }
-                await ScreenShot(screenshotsDir);
-                await WaitForElementToAppear("Дякуємо, ми обробляємо ваш запит", 120000);
-                await ScreenShot(screenshotsDir);
-                await SaveDateToFile(ctx.DataDirectory, newBookedDT);
-            }
-            else
-            {
-                Console.WriteLine("❌ No better slots found than previously booked.");
-            }
-        }
-
         public async Task<bool> ClickElementByTextInScope(ILocator scopeLocator, string searchText)
         {
             Console.WriteLine($"🔍 Searching for '{searchText}' within the provided scope...");
 
-            // Playwright Locators are chainable: calling Locator() on an existing ILocator 
+            // Playwright Locators are chainable: calling Locator() on an existing ILocator
             // scopes the new search exclusively to elements contained within the parent.
 
             // Build a powerful locator focused only inside the scope:
@@ -349,7 +216,7 @@ namespace UkrainianBotTaras
                 var buttonLocator = dayButtons.Nth(i);
                 string dayText = await buttonLocator.InnerTextAsync();
 
-                // Use Playwright's XPath to go up: 
+                // Use Playwright's XPath to go up:
                 // button -> parent (.jss236) -> parent (the full daily container <div>)
                 var wholeDayContainer = buttonLocator.Locator("xpath=../..");
 
@@ -426,6 +293,145 @@ namespace UkrainianBotTaras
             Console.WriteLine("❌ [SlotSearch] All visible weeks are full.");
             return false;
         }
+
+        private static (string KeysDir, string ScreenshotsDir, string DownloadedPagesDir)
+                            EnsureDataDirectories(StepsContext ctx)
+        {
+            if (string.IsNullOrWhiteSpace(ctx.DataDirectory))
+                throw new InvalidOperationException("DataDirectory is not set.");
+
+            Directory.CreateDirectory(ctx.DataDirectory);
+
+            string keysDir = Path.Combine(ctx.DataDirectory, "Keys");
+            string keyPath = Path.Combine(ctx.DataDirectory, "Keys", ctx.KeyFileName);
+
+            string screenshotsDir = Path.Combine(ctx.DataDirectory, "Screenshots");
+            string downloadedPagesDir = Path.Combine(ctx.DataDirectory, "DownloadedPages");
+
+            Directory.CreateDirectory(keysDir);
+            Directory.CreateDirectory(screenshotsDir);
+            Directory.CreateDirectory(downloadedPagesDir);
+
+            return (keyPath, screenshotsDir, downloadedPagesDir);
+        }
+
+        // ----------------------------
+        // Reusable Rules
+        // ----------------------------
+
+        private async Task OpenURL(string url)
+        {
+            Console.WriteLine($"Opening url: {url}...");
+            await page.GotoAsync(url);
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        }
+
+        private async Task<ILocator?> FindFirstAvailableSlotInScope(ILocator scopeLocator)
+        {
+            Console.WriteLine("🕵️ Scanning for available time slots within the provided scope...");
+
+            // Note: We are no longer calling GetActiveFrame() here,
+            // as the search starts from the 'scopeLocator' provided.
+
+            // 1. Define a Regex to match time strings like "09:00" or "14:30"
+            var timePattern = new Regex(@"\d{2}:\d{2}");
+
+            // 2. Build the Locator chain, starting the search from the 'scopeLocator':
+            //    A. Find all clickable buttons (divs with role='button')
+            //    B. Exclude ones that are explicitly "booked" (aria-label contains 'заброньовано')
+            //    C. Filter specifically for elements containing a Time Pattern (00:00)
+
+            // The key change is calling Locator() on 'scopeLocator' instead of 'frame'
+            var availableSlots = scopeLocator.Locator("div[role='button']:not([aria-label*='заброньовано'])")
+                                             .Filter(new() { HasTextRegex = timePattern });
+
+            // 3. Check if we found anything
+            if (await availableSlots.CountAsync() > 0)
+            {
+                var firstSlot = availableSlots.First;
+
+                // Log the success
+                var timeText = await firstSlot.InnerTextAsync();
+                Console.WriteLine($"✅ Available slot found: {timeText}");
+
+                return firstSlot;
+            }
+
+            Console.WriteLine("⚠️ No available slots found in this scope.");
+            return null;
+        }
+
+        private async Task ChooseBestSlotAndProceed()
+        {
+            ILocator? bestSlot = null;
+            int index = 0;
+            ILocator? dateEl = null;
+            DateTime lastBookedDT;
+            DateTime newBookedDT;
+            do
+            {
+                ILocator monthEl = await GetMonthTabByIndexAndClick(index);
+
+                bool pageHasAvailableSlots = await FindAndClickFirstAvailableWeeklySlot();
+
+                if (pageHasAvailableSlots)
+                {
+                    await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                    await page.WaitForTimeoutAsync(3000);
+
+                    List<ILocator> daysOfWeek = await GetAllDailyScheduleDivsByText();
+
+                    if (daysOfWeek.Count > 0)
+                    {
+                        foreach (ILocator dayOfWeek in daysOfWeek)
+                        {
+                            if (bestSlot == null)
+                            {
+                                await ClickElementByTextInScope(dayOfWeek, "Показати ще");
+                                bestSlot = await FindFirstAvailableSlotInScope(dayOfWeek);
+                                if (bestSlot != null)
+                                {
+                                    dateEl = dayOfWeek;
+                                }
+                            }
+                        }
+                    }
+                }
+                index++;
+            } while (bestSlot == null);
+
+            newBookedDT = await ParseAppointmentDate(dateEl, bestSlot);
+
+            lastBookedDT = await GetDateFromFile(ctx.DataDirectory);
+            // Only rebook if the new slot is EARLIER than the one we already have
+            if (lastBookedDT == DateTime.MinValue || newBookedDT < lastBookedDT)
+            {
+                await Click(bestSlot);
+                await Click("Підтвердити");
+
+                await ScreenShot(screenshotsDir);
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                await WaitForElementToAppear("Зачекайте, будь ласка, відбувається перевірка", 60000);
+                await WaitForElementToDisapear("Зачекайте, будь ласка, відбувається перевірка", 1200000);
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                await page.WaitForTimeoutAsync(5000);
+                await ScreenShot(screenshotsDir);
+                if (await page.GetByText("Скасування попередньої дати візиту").IsVisibleAsync())
+                {
+                    await ClickRadioByLabel("Так");
+                    await Click("Підтверджую");
+                }
+                await ScreenShot(screenshotsDir);
+                await WaitForElementToAppear("Дякуємо, ми обробляємо ваш запит", 120000);
+                await ScreenShot(screenshotsDir);
+                await SaveDateToFile(ctx.DataDirectory, newBookedDT);
+            }
+            else
+            {
+                Console.WriteLine("❌ No better slots found than previously booked.");
+            }
+        }
+
         private int ParseAvailableSlotCount(string statusText)
         {
             // The format is typically "N ВІЛЬНИХ СЛОТІВ"
@@ -520,6 +526,7 @@ namespace UkrainianBotTaras
             Console.WriteLine($"✅ [MonthSelector] Clicked month [{index}]: {labelText}");
             return targetTab;
         }
+
         private async Task Click(ILocator locator)
         {
             // 1. Safety: Use .First to avoid "Strict Mode" errors if the locator matches multiple items
@@ -679,6 +686,7 @@ namespace UkrainianBotTaras
 
             Console.WriteLine("✅ Screenshot saved.");
         }
+
         private async Task Click(string searchText)
         {
             Console.WriteLine($"Clicking: {searchText}...");
@@ -697,7 +705,7 @@ namespace UkrainianBotTaras
             // This creates a "Super Locator" that matches if ANY of the above match
             var combinedLocator = byText.Or(byRole).Or(byLabel);
 
-            // We use .First to ensure that if multiple matches exist, 
+            // We use .First to ensure that if multiple matches exist,
             // we simply click the first one instead of crashing with a "Strict Mode" error.
             await combinedLocator.First.HumanClickAsync();
         }
@@ -719,7 +727,6 @@ namespace UkrainianBotTaras
             await locator.HumanClickAsync();
         }
 
-
         private async Task ClickRadioByLabel(string labelText)
         {
             Console.WriteLine($"Clicking radio button for: '{labelText}'...");
@@ -734,7 +741,6 @@ namespace UkrainianBotTaras
             await clickableSpan.ScrollIntoViewIfNeededAsync();
             await clickableSpan.ClickAsync();
         }
-
 
         private async Task UploadFile(string searchText, string filePath)
         {
@@ -812,7 +818,6 @@ namespace UkrainianBotTaras
                 // 2. Type the value (This filters the virtual list so the option appears)
                 // We type slowly to trigger the JS search events
                 await element.TypeAsync(value, new LocatorTypeOptions { Delay = 100 });
-
             }
             else
             {
@@ -853,6 +858,7 @@ namespace UkrainianBotTaras
             await specificOption.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 5000 });
             await specificOption.HumanClickAsync(page);
         }
+
         private async Task SelectAndEnterToDropdown(string labelOrQaId, string optionText)
         {
             Console.WriteLine($"Selecting '{optionText}' in dropdown '{labelOrQaId}'...");
@@ -869,7 +875,6 @@ namespace UkrainianBotTaras
 
             if (!await option.IsVisibleAsync())
             {
-
                 option = page.Locator("li[role='option']").GetByText(optionText);
             }
 

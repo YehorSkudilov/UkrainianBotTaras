@@ -1,13 +1,19 @@
 ﻿{
   "BaseUrl": "https://id.e-consul.gov.ua/",
-  "KeyFileName": "Завірюха_А_Р_monoКЕП_2025-12-11T213412.pfx",
-  "KeyPassword": "$hzhehs&Q6",
+  "KeyFileName": "",
+  "KeyPassword": "",
 
-  "DayOfBirth": "08",
-  "MonthOfBirth": "травня",
-  "YearOfBirth": "2006",
+  "DayOfBirth": "",
+  "MonthOfBirth": "",
+  "YearOfBirth": "",
 
-  "Country": "Канада",
-  "ConsulateName": "Генеральне Консульство України в Едмонтоні",
-  "ServiceName": "Оформлення закордонного паспорта"
+  "Country": "",
+  "ConsulateName": "",
+  "ServiceName": "",
+
+  "ForYourself": true,
+
+  "ChildName": "",
+  "ChildMiddleName": "",
+  "ChildLastName": ""
 }

@@ -12,11 +12,15 @@ namespace UkrainianBotTaras
         public string DataDirectory { get; set; }
         public string KeyPassword { get; set; }
         public string DayOfBirth { get; set; }
-        public string MonthOfBirth {get; set;}
+        public string MonthOfBirth { get; set; }
         public string YearOfBirth { get; set; }
         public string Country { get; set; }
         public string ConsulateName { get; set; }
         public string ServiceName { get; set; }
         public string KeyFileName { get; set; }
+        public bool ForYourself { get; set; }
+        public string ChildName { get; set; }
+        public string ChildMiddleName { get; set; }
+        public string ChildLastName { get; set; }
     }
 }
