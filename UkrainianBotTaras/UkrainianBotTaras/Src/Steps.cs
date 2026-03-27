@@ -113,17 +113,22 @@ namespace UkrainianBotTaras
                             Console.WriteLine("Завантаження... happened too fast");
                         }
                         await taskFillSmartDropdown3;
-                        if (ctx.ForYourself)
+
+
+                        switch (ctx.ForWho)
                         {
-                            await ClickRadioByLabel("Для себе");
+                            case "ForYourself":
+                                await ClickRadioByLabel("Для себе");
+                                break;
+                            case "ForKids":
+                                await FillKids();
+                                break;
+                            case "ForBoth":
+                                await ClickRadioByLabel("Для себе");
+                                await FillKids();
+                                break;
                         }
-                        else
-                        {
-                            await ClickRadioByLabel("Для своєї дитини, підопічного");
-                            await FillInputComplex("Прізвище", ctx.ChildLastName);
-                            await FillInputComplex("Ім'я", ctx.ChildName);
-                            await FillInputComplex("По батькові", ctx.ChildMiddleName);
-                        }
+   
                     }
                     await RandomDelay(500, 5000);
                     await Click("Далі");
@@ -156,6 +161,29 @@ namespace UkrainianBotTaras
                 }
             }
         }
+
+        public async Task FillKids()
+        {
+            Kid[] kids = ctx.Kids;
+
+            await ClickRadioByLabel("Для своєї дитини, підопічного");
+
+            await FillKid(kids[0]);
+
+            for (int i = 1; i<kids.Length; i++)
+            {
+                await Click("Додати ще одну особу");
+                await FillKid(kids[i]);
+            }
+
+        }
+        public async Task FillKid(Kid kid)
+        {
+            await FillInputComplex("Прізвище", kid.ChildLastName);
+            await FillInputComplex("Ім'я", kid.ChildName);
+            await FillInputComplex("По батькові", kid.ChildMiddleName);
+        }
+
 
         public async Task<bool> ClickElementByTextInScope(ILocator scopeLocator, string searchText)
         {
@@ -895,9 +923,10 @@ namespace UkrainianBotTaras
 
             ILocator input;
 
-            // 1. Try to find by the 'data-qa' attribute (Your HTML uses this!)
-            // This turns "день" into "[data-qa='день']"
-            var byDataQa = frame.Locator($"[data-qa='{text}']");
+            // Escape quotes for CSS
+            var escaped = text.Replace("\"", "\\\"");
+
+            var byDataQa = frame.Locator($"[data-qa=\"{escaped}\"]");
 
             if (await byDataQa.CountAsync() > 0)
             {
@@ -905,11 +934,9 @@ namespace UkrainianBotTaras
             }
             else
             {
-                // 2. Fallback: Try to find by visual Label
                 input = frame.GetByLabel(text).First;
             }
 
-            // Now 'input' is valid, so BoundingBoxAsync won't timeout
             await input.HumanFillAsync(value, page);
         }
 

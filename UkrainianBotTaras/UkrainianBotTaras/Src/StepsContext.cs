@@ -18,7 +18,12 @@ namespace UkrainianBotTaras
         public string ConsulateName { get; set; }
         public string ServiceName { get; set; }
         public string KeyFileName { get; set; }
-        public bool ForYourself { get; set; }
+        public string ForWho { get; set; }
+        public Kid[] Kids { get; set; }
+    }
+
+    public class Kid
+    {
         public string ChildName { get; set; }
         public string ChildMiddleName { get; set; }
         public string ChildLastName { get; set; }

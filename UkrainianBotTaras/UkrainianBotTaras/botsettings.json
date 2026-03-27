@@ -1,5 +1,6 @@
 ﻿{
   "BaseUrl": "https://id.e-consul.gov.ua/",
+  "DataDirectory": "",
   "KeyFileName": "",
   "KeyPassword": "",
 
@@ -11,9 +12,13 @@
   "ConsulateName": "",
   "ServiceName": "",
 
-  "ForYourself": true,
+  "ForWho": "Yourself",
 
-  "ChildName": "",
-  "ChildMiddleName": "",
-  "ChildLastName": ""
+  "Kids": [
+    {
+      "ChildName": "",
+      "ChildMiddleName": "",
+      "ChildLastName": ""
+    }
+  ]
 }
