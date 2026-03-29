@@ -4,7 +4,7 @@
 		<OutputType>Exe</OutputType>
 
 		<!-- Cross-platform -->
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
@@ -28,6 +28,10 @@
 	<ItemGroup>
 	  <Folder Include="Properties\" />
 	  <Folder Include="testSettings\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="bin\Debug\net10.0\Data\Keys\Ковальчук_М_В_monoКЕП_2026-03-03T22_39_46.pfx" />
 	</ItemGroup>
 
 </Project>
