@@ -309,8 +309,7 @@ namespace UkrainianBotTaras
 
                     await targetElement.ScrollIntoViewIfNeededAsync();
 
-                    // Using your HumanExtensions
-                    await targetElement.HumanClickAsync();
+                    await targetElement.ClickAsync();
 
                     // Give it time to load the daily schedule
                     await Task.Delay(2000);
